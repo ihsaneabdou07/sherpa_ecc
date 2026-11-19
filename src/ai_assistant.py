@@ -1,14 +1,4 @@
-def construire_prompt(region, resultats):
-    """Prompt qui sera envoyé à l'API (OpenAI, etc.) plus tard."""
-    return f"""Tu es un ingénieur spécialisé en hydrogène vert.
-Région : {region}
-Résultats du calcul : {resultats}
-Explique à l'utilisateur pourquoi l'architecture 'best_overall' est recommandée,
-en citant les chiffres (LCOH en €/kg, CO2 en kg/kg H2)."""
-
-
 def generer_explication(region, resultats):
-    """Version simulée : génère un texte à partir des chiffres."""
     if "erreur" in resultats:
         return resultats["erreur"]
 
@@ -16,11 +6,25 @@ def generer_explication(region, resultats):
     c = resultats["lowest_cost"]
     e = resultats["lowest_co2"]
 
-    return (
+    txt = (
         f"Pour {region}, l'architecture recommandée est {b['architecture']} : "
-        f"LCOH de {b['lcoh_eur_kg']} €/kg, {b['co2_kg_par_kg']} kg CO2/kg H2, "
+        f"LCOH de {b['lcoh_eur_kg']:.2f} €/kg, {b['co2_kg_par_kg']:.2f} kg CO2/kg H2, "
         f"avec un électrolyseur à {b['ratio_pct']} % de la puissance du parc "
-        f"({b['puissance_kw']} kW). C'est le meilleur compromis coût/CO2. "
-        f"L'option la moins chère est {c['architecture']} ({c['lcoh_eur_kg']} €/kg), "
-        f"et la moins émettrice est {e['architecture']} ({e['co2_kg_par_kg']} kg CO2/kg H2)."
+        f"({b['puissance_kw']} kW). "
     )
+    if "lcoh_p50" in b:
+        txt += (
+            f"Sur les simulations d'incertitude, son LCOH se situe entre "
+            f"{b['lcoh_p10']:.2f} et {b['lcoh_p90']:.2f} €/kg (médiane {b['lcoh_p50']:.2f}), "
+            f"et elle est la moins chère dans {b['proba_moins_cher_pct']:.0f} % des scénarios. "
+        )
+    if c["architecture"] == b["architecture"]:
+        txt += "C'est aussi l'option la moins chère. "
+    else:
+        txt += f"L'option la moins chère est {c['architecture']} ({c['lcoh_eur_kg']:.2f} €/kg). "
+    if e["architecture"] == b["architecture"]:
+        txt += "C'est aussi la moins émettrice."
+    else:
+        txt += (f"La moins émettrice est {e['architecture']} "
+                f"({e['co2_kg_par_kg']:.2f} kg CO2/kg H2, LCOH {e['lcoh_eur_kg']:.2f} €/kg).")
+    return txt

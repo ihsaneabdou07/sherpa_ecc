@@ -1,6 +1,8 @@
 {
   "Dakhla": {
     "Puissance_Parc_ENR_kW": 50000,
+    "Latitude": 23.68,
+    "Longitude": -15.96,
     "Cout_Eau": 0.8,
     "Taux_Interet": 0.05,
     "Duree_Vie_Electrolyseur": 20,
