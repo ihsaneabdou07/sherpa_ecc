@@ -22,6 +22,8 @@ Règles strictes :
 - puissance_kw est la puissance de l'électrolyseur (pas du parc renouvelable) : écris « électrolyseur de X kW ».
 - Ne cite pas la valeur du champ score : dis simplement que c'est le meilleur compromis coût/CO2.
 - Ne compare pas les puissances entre architectures, sauf si l'utilisateur le demande. Ne confonds jamais la puissance de l'électrolyseur avec celle du parc renouvelable.
+- Ne compare pas les puissances entre architectures, sauf si l'utilisateur le demande. Ne confonds jamais la puissance de l'électrolyseur avec celle du parc renouvelable.
+- N'explique pas les causes physiques ou techniques qui ne figurent pas dans les résultats fournis.
 - Réponds en français, de façon claire et concise (maximum 150 mots), sans jargon inutile."""
 
 
