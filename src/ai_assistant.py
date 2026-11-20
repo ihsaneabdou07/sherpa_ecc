@@ -3,7 +3,7 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)  # override pour forcer la lecture du .env même si la variable d'environnement existe
 
 MODELES = [m.strip() for m in os.getenv("GEMINI_MODELS","gemini-3.5-flash-lite,gemini-3.5-flash,gemini-3.7-flash,gemini-3.8-flash").split(",") if m.strip()]
 
