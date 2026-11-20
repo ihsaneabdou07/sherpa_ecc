@@ -90,15 +90,15 @@ def optimiser_architecture_horaire(region, n_mc=0, annee_meteo=2022):
         m = _meilleur_ratio(cf, p_parc, lcoes[nom], donnees, CAPEX_MULT_NOMINAL)
         candidats.append({
             "architecture": nom,
-            "lcoh_eur_kg": round(m["lcoh"], 3),
+            "lcoh_eur_kg": round(float(m["lcoh"]), 3) if m else np.nan,
             "co2_kg_par_kg": round(archis[nom]["CO2_kg_par_kWh"] * LHV / EFFICACITE, 3),
             "eau_L_par_kg": round(EAU_M3_PAR_KG * 1000, 1),
             "trl": archis[nom]["TRL"],
             "ratio_pct": m["ratio_pct"],
             "puissance_kw": round(p_parc * m["ratio_pct"] / 100),
-            "h2_tonnes_an": round(m["h2_kg"] / 1000, 1),
+            "h2_tonnes_an": round(float(m["h2_kg"]) / 1000, 1) if m else np.nan,
             "facteur_charge_parc": round(float(cf.mean()), 3),
-            "energie_perdue_pct": round(m["energie_perdue_pct"], 1),
+            "energie_perdue_pct": round(float(m["energie_perdue_pct"]), 1) if m else np.nan,
         })
 
     if n_mc > 0:
@@ -113,8 +113,8 @@ def optimiser_architecture_horaire(region, n_mc=0, annee_meteo=2022):
     couts = [c["lcoh_eur_kg"] for c in candidats]
     co2s = [c["co2_kg_par_kg"] for c in candidats]
     for c in candidats:
-        c["score"] = round(0.5 * norm(c["lcoh_eur_kg"], min(couts), max(couts))
-                           + 0.5 * norm(c["co2_kg_par_kg"], min(co2s), max(co2s)), 3)
+        c["score"] = round(float(0.5 * norm(c["lcoh_eur_kg"], min(couts), max(couts))
+                           + 0.5 * norm(c["co2_kg_par_kg"], min(co2s), max(co2s))), 3)
 
     return {
         "best_overall": min(candidats, key=lambda c: c["score"]),
