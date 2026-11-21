@@ -65,7 +65,7 @@ def calculer_lcoh(ratio, donnees, archi):
     return lcoh, h2_kg, p_ely
 
 
-def optimiser_architecture(region):
+def optimiser_architecture_v1(region):
     """
     Pour chaque architecture (Eolien, Solaire, Hybride), teste les ratios 5 % à 100 %
     et garde le meilleur. Puis désigne les 3 scénarios.
@@ -109,3 +109,8 @@ def optimiser_architecture(region):
         "lowest_co2": min(candidats, key=lambda c: c["co2_kg_par_kg"]),
         "toutes_architectures": candidats,   # pour le Pareto et le radar
     }
+    
+def optimiser_architecture(region, n_mc=0):
+    """Point d'entrée utilisé par le frontend : moteur horaire."""
+    from src.optimiseur import optimiser_architecture_horaire
+    return optimiser_architecture_horaire(region, n_mc=n_mc)
