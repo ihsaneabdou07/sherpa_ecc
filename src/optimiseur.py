@@ -1,5 +1,5 @@
 import numpy as np
-from src.engine import charger_donnees, LHV, EFFICACITE, EAU_M3_PAR_KG
+from src.engine import charger_donnees, LHV, EAU_M3_PAR_KG
 from src.engine_horaire import simuler
 from src.meteo import telecharger_meteo, profil_solaire, profil_eolien
 
@@ -10,11 +10,16 @@ RATIOS = range(10, 151, 5)
 PART_SOLAIRE = 0.5
 
 
-def _lcoe_hybride(lcoe_sol, lcoe_vent, cf_sol, cf_vent):
-    """LCOE de l'hybride pondéré par l'énergie produite par chaque source."""
+def _poids_solaire(cf_sol, cf_vent):
+    """Part de l'énergie hybride produite par le solaire."""
     e_sol = PART_SOLAIRE * cf_sol.mean()
     e_vent = (1 - PART_SOLAIRE) * cf_vent.mean()
-    w = e_sol / (e_sol + e_vent)
+    return float(e_sol / (e_sol + e_vent))
+
+
+def _lcoe_hybride(lcoe_sol, lcoe_vent, cf_sol, cf_vent):
+    """LCOE de l'hybride pondéré par l'énergie produite par chaque source."""
+    w = _poids_solaire(cf_sol, cf_vent)
     return w * lcoe_sol + (1 - w) * lcoe_vent
 
 
@@ -85,21 +90,36 @@ def optimiser_architecture_horaire(region, n_mc=0, annee_meteo=2022):
     lcoes = {"Eolien": lcoe_vent, "Solaire": lcoe_sol,
              "Hybride": _lcoe_hybride(lcoe_sol, lcoe_vent, cf_sol, cf_vent)}
 
+    # Intensité carbone (kg CO2/kWh) ; l'hybride est pondéré par l'énergie de chaque source
+    w_sol = _poids_solaire(cf_sol, cf_vent)
+    co2_kwh = {
+        "Eolien": archis["Eolien"]["CO2_kg_par_kWh"],
+        "Solaire": archis["Solaire"]["CO2_kg_par_kWh"],
+        "Hybride": w_sol * archis["Solaire"]["CO2_kg_par_kWh"]
+                   + (1 - w_sol) * archis["Eolien"]["CO2_kg_par_kWh"],
+    }
+
     candidats = []
     for nom, cf in profils.items():
         m = _meilleur_ratio(cf, p_parc, lcoes[nom], donnees, CAPEX_MULT_NOMINAL)
+        if m is None:
+            continue   # architecture sans production exploitable
         candidats.append({
             "architecture": nom,
-            "lcoh_eur_kg": round(float(m["lcoh"]), 3) if m else np.nan,
-            "co2_kg_par_kg": round(archis[nom]["CO2_kg_par_kWh"] * LHV / EFFICACITE, 3),
+            "lcoh_eur_kg": round(float(m["lcoh"]), 3),
+            # Émissions du parc entier rapportées au H2 produit (l'énergie perdue compte)
+            "co2_kg_par_kg": round(float(co2_kwh[nom] * m["gen_kwh"] / m["h2_kg"]), 3),
             "eau_L_par_kg": round(EAU_M3_PAR_KG * 1000, 1),
             "trl": archis[nom]["TRL"],
             "ratio_pct": m["ratio_pct"],
             "puissance_kw": round(p_parc * m["ratio_pct"] / 100),
-            "h2_tonnes_an": round(float(m["h2_kg"]) / 1000, 1) if m else np.nan,
+            "h2_tonnes_an": round(float(m["h2_kg"]) / 1000, 1),
             "facteur_charge_parc": round(float(cf.mean()), 3),
-            "energie_perdue_pct": round(float(m["energie_perdue_pct"]), 1) if m else np.nan,
+            "energie_perdue_pct": round(float(m["energie_perdue_pct"]), 1),
         })
+
+    if not candidats:
+        return {"erreur": f"Aucune architecture exploitable pour '{region}'"}
 
     if n_mc > 0:
         mc = _monte_carlo(profils, lcoe_sol, lcoe_vent, cf_sol, cf_vent,
