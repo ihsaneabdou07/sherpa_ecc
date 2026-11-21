@@ -2,12 +2,13 @@ import numpy as np
 from src.engine import charger_donnees, LHV, EAU_M3_PAR_KG
 from src.engine_horaire import simuler
 from src.meteo import telecharger_meteo, profil_solaire, profil_eolien
+from src.parametres import PARAMS as P
 
 # HYPOTHÈSE : multiplicateur CAPEX nominal (centre de la plage 1 à 2,5 du Monte Carlo).
 # À valider avec l'équipe Data et l'article de Hofrichter.
-CAPEX_MULT_NOMINAL = 1.75
+CAPEX_MULT_NOMINAL = P["capex_mult_nominal"]
 RATIOS = range(10, 151, 5)
-PART_SOLAIRE = 0.5
+PART_SOLAIRE = P["part_solaire_hybride"]
 
 
 def _poids_solaire(cf_sol, cf_vent):

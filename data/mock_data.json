@@ -1,4 +1,5 @@
 {  
+  "_statut": "TEST : valeurs inventées par le Backend, à remplacer par l'équipe Data",
   "Dakhla": {
     "Puissance_Parc_ENR_kW": 50000,
     "Latitude": 23.68,

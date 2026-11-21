@@ -2,13 +2,14 @@ import numpy as np
 from src.engine import (calculer_capex, facteur_annuite, LHV, EAU_M3_PAR_KG,
                         OPEX_PCT, ASSURANCE)
 
-CHARGE_MIN = 0.10   # en dessous de 10 % de charge, l'électrolyseur s'arrête
+from src.parametres import PARAMS as P
+
+CHARGE_MIN = P["charge_min"]   # en dessous, l'électrolyseur s'arrête
 
 
 def conso_specifique(charge):
-    """kWh d'électricité par kg d'H2 selon la charge (courbe simplifiée, à remplacer
-    par la fiche constructeur)."""
-    return 50 + 10 * (charge - 0.4) ** 2
+    """kWh d'électricité par kg d'H2 selon la charge (à remplacer par la fiche constructeur)."""
+    return P["conso_base"] + P["conso_coef"] * (charge - P["conso_charge_ref"]) ** 2
 
 
 def simuler(cf_horaire, p_parc_kw, ratio, lcoe, donnees, capex_mult=1.0):
