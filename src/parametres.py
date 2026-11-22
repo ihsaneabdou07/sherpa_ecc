@@ -11,7 +11,7 @@ DEFAUTS = {
     "pr_solaire": 0.80, "eolien_hauteur": 100, "eolien_cisaillement": 0.14,
     "eolien_v_in": 3, "eolien_v_nom": 12, "eolien_v_out": 25,
     "part_solaire_hybride": 0.5,
-    "courbe_rendement": "quadratique",
+    "courbe_rendement": "hofrichter",
 }
 
 
