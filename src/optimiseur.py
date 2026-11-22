@@ -117,6 +117,11 @@ def optimiser_architecture_horaire(region, n_mc=0, annee_meteo=2022):
             "h2_tonnes_an": round(float(m["h2_kg"]) / 1000, 1),
             "facteur_charge_parc": round(float(cf.mean()), 3),
             "energie_perdue_pct": round(float(m["energie_perdue_pct"]), 1),
+            "capex_meur": round(float(m["capex_eur"]) / 1e6, 2),
+                        "capex_par_kg_h2_an": round(float(m["capex_eur"]) / float(m["h2_kg"]), 2),
+            "cout_annuel_meur": round(float(m["cout_annuel_eur"]) / 1e6, 2),
+            "heures_marche": int(m["heures_marche"]),
+            "facteur_charge_electrolyseur": round(float(m["facteur_charge_ely"]), 3),
         })
 
     if not candidats:

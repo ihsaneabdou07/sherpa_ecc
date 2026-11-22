@@ -36,7 +36,9 @@ def simuler(cf_horaire, p_parc_kw, ratio, lcoe, donnees, capex_mult=1.0):
     return {
         "lcoh": lcoh,
         "h2_kg": h2_kg,
-        "gen_kwh": float(gen.sum()),                   # NOUVEAU : énergie produite par le parc
+        "gen_kwh": float(gen.sum()),
+        "capex_eur": float(capex),
+        "cout_annuel_eur": float(cout_elec + cout_eau + cout_fixe),
         "heures_marche": int(marche.sum()),
         "facteur_charge_ely": e_ely.sum() / (p_ely * 8760),
         "energie_perdue_pct": 100 * (1 - e_ely.sum() / gen.sum()),
