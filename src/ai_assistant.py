@@ -3,28 +3,42 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv(override=True)  # override pour forcer la lecture du .env même si la variable d'environnement existe
+load_dotenv(override=True)  # le .env du projet prime sur une éventuelle variable système
 
-MODELES = [m.strip() for m in os.getenv("GEMINI_MODELS","gemini-3.5-flash-lite,gemini-3.5-flash,gemini-3.7-flash,gemini-3.8-flash").split(",") if m.strip()]
+MODELES = [m.strip() for m in os.getenv(
+    "GEMINI_MODELS",
+    "gemini-3.5-flash-lite,gemini-3.5-flash,gemini-3.7-flash,gemini-3.8-flash"
+).split(",") if m.strip()]
 
 SYSTEM_PROMPT = """Tu es un ingénieur conseil spécialisé en hydrogène vert, intégré à la plateforme SHERPA.
 Règles strictes :
-- Utilise UNIQUEMENT les chiffres fournis dans les résultats. N'invente aucune valeur.
-- Si une information n'est pas dans les résultats, dis-le clairement.
+- Utilise UNIQUEMENT les chiffres fournis. N'invente aucune valeur.
+- Si une information n'est pas dans les données, dis-le clairement.
 - Les résultats viennent d'un modèle simplifié avec des hypothèses (LCOE, CAPEX, intensité carbone,
   une seule année météo). Rappelle-le brièvement quand tu donnes une recommandation.
 - Unités : LCOH en €/kg, CO2 en kg CO2/kg H2, puissance en kW.
-- Si le champ proba_moins_cher_pct existe, utilise-le pour parler de robustesse.
-- Ne cite jamais les noms de champs techniques (best_overall, proba_moins_cher_pct, lowest_cost...) :
-  parle de « meilleur compromis », « option la moins chère », « option la moins émettrice ».
+- Ne cite jamais les noms de champs techniques : parle de « meilleur compromis »,
+  « option la moins chère », « option la moins émettrice », « CAPEX par kg d'hydrogène produit ».
 - Ne mentionne pas les informations absentes sauf si l'utilisateur les demande.
 - Ne commence pas par te présenter. Va directement à la réponse.
-- puissance_kw est la puissance de l'électrolyseur (pas du parc renouvelable) : écris « électrolyseur de X kW ».
-- Ne cite pas la valeur du champ score : dis simplement que c'est le meilleur compromis coût/CO2.
-- Ne compare pas les puissances entre architectures, sauf si l'utilisateur le demande. Ne confonds jamais la puissance de l'électrolyseur avec celle du parc renouvelable.
-- Ne compare pas les puissances entre architectures, sauf si l'utilisateur le demande. Ne confonds jamais la puissance de l'électrolyseur avec celle du parc renouvelable.
-- N'explique pas les causes physiques ou techniques qui ne figurent pas dans les résultats fournis.
-- Réponds en français, de façon claire et concise (maximum 150 mots), sans jargon inutile."""
+- puissance_kw est la puissance de l'électrolyseur (pas du parc renouvelable).
+- Ne cite pas les scores bruts comme des valeurs absolues.
+Quand une comparaison multicritère est fournie :
+- Indique le scénario recommandé et la part des pondérations testées pour lesquelles il l'emporte.
+- Précise si le gagnant change selon le profil de priorités (économique, environnemental, technique).
+- Explique les points forts et faibles des scénarios avec leurs valeurs chiffrées.
+- Rappelle que les poids des profils sont des hypothèses et que les scores sont relatifs
+  aux trois scénarios comparés, pas des notes absolues.
+- Pour comparer deux régions, utilise les données de chaque région fournie.
+- Le pourcentage de tirages aléatoires de poids gagnés ne dépend d'aucun profil : ne l'associe jamais
+  à un profil précis. Pour un profil donné, utilise uniquement le gagnant de ce profil.
+- Pour tout pourcentage d'écart, utilise uniquement les champs ecart_relatif_au_meilleur_scenario_pct
+  et ecarts_entre_regions. Ne calcule jamais un écart toi-même.
+- Dis que deux valeurs sont « quasi équivalentes » seulement si l'écart fourni est inférieur à 2 %.
+  Au-delà, ne les présente pas comme équivalentes.
+- Ne répète le rappel des hypothèses qu'une seule fois, en une phrase courte.
+- Respecte strictement la limite de 200 mots.
+- Réponds en français, de façon claire et concise (maximum 200 mots), sans jargon inutile."""
 
 
 def _resume_resultats(resultats):
@@ -37,15 +51,115 @@ def _resume_resultats(resultats):
     }
 
 
-def construire_prompt(region, resultats, question=None):
-    donnees = json.dumps(_resume_resultats(resultats), ensure_ascii=False,
-                         indent=1, default=float)
-    q = question or ("Explique pourquoi l'architecture 'best_overall' est recommandée, "
-                     "en citant les chiffres.")
-    return f"Région : {region}\nRésultats du calcul :\n{donnees}\n\nQuestion : {q}"
+def _ecarts_relatifs(scenarios):
+    """Pour chaque critère, écart relatif (%) de chaque scénario au meilleur scénario."""
+    from src.comparaison import CRITERES
+    sortie = {nom: {} for nom in scenarios}
+    for cle, _, _, sens in CRITERES:
+        vals = {n: s["valeurs"].get(cle) for n, s in scenarios.items()}
+        if any(v is None for v in vals.values()):
+            continue
+        ref = min(vals.values()) if sens == "min" else max(vals.values())
+        if ref == 0:
+            continue
+        for n, v in vals.items():
+            sortie[n][cle] = round(100 * abs(v - ref) / abs(ref), 1)
+    return sortie
 
 
-def generer_explication_simulee(region, resultats):
+def _ecarts_entre_regions(comparaison):
+    """Écart relatif (%) de chaque scénario entre régions, par rapport à la première région."""
+    comps = comparaison if isinstance(comparaison, list) else [comparaison]
+    comps = [c for c in comps if c and "erreur" not in c]
+    if len(comps) < 2:
+        return None
+    ref = comps[0]
+    sortie = {}
+    for c in comps[1:]:
+        par_scenario = {}
+        for nom, s in c["scenarios"].items():
+            par_scenario[nom] = {}
+            for cle in ("lcoh_eur_kg", "co2_kg_par_kg", "capex_par_kg_h2_an", "h2_tonnes_an"):
+                a = ref["scenarios"][nom]["valeurs"].get(cle)
+                b = s["valeurs"].get(cle)
+                if a and b is not None:
+                    par_scenario[nom][cle] = {
+                        ref["region"]: a, c["region"]: b,
+                        "ecart_pct": round(100 * (b - a) / a, 1),
+                    }
+        sortie[f"{c['region']}_par_rapport_a_{ref['region']}"] = par_scenario
+    return sortie
+
+
+def _resume_comparaison(comparaison):
+    """Accepte la comparaison d'une région (dict) ou de plusieurs (liste)."""
+    comps = comparaison if isinstance(comparaison, list) else [comparaison]
+    sortie = []
+    for c in comps:
+        if not c or "erreur" in c:
+            continue
+        ecarts = _ecarts_relatifs(c["scenarios"])
+        sortie.append({
+            "region": c["region"],
+            "scenario_recommande_profil_equilibre": c["recommandation"],
+            "gagnant_par_profil": c["gagnant_par_profil"],
+            "part_des_tirages_aleatoires_de_poids_gagnes_pct": c["robustesse_poids_pct"],
+            "poids_des_profils": c["profils"],
+            "classement": {
+                p: [{"scenario": l["architecture"], "score": l["score"]} for l in lignes]
+                for p, lignes in c["classement"].items()
+            },
+            "scenarios": {
+                nom: {"valeurs": s["valeurs"],
+                      "ecart_relatif_au_meilleur_scenario_pct": ecarts[nom],
+                      "points_forts": s["forces"],
+                      "points_faibles": s["faiblesses"]}
+                for nom, s in c["scenarios"].items()
+            },
+        })
+    return sortie
+
+
+def construire_prompt(region, resultats, question=None, comparaison=None):
+    contenu = {"resultats_optimisation": _resume_resultats(resultats)}
+    comp = _resume_comparaison(comparaison) if comparaison else []
+    if comp:
+        contenu["comparaison_multicritere"] = comp
+        ecarts_regions = _ecarts_entre_regions(comparaison)
+        if ecarts_regions:
+            contenu["ecarts_entre_regions"] = ecarts_regions
+    donnees = json.dumps(contenu, ensure_ascii=False, indent=1, default=float)
+
+    if question:
+        q = question
+    elif comp:
+        q = ("Explique le scénario recommandé et dis si la recommandation change "
+             "selon les priorités, en citant les chiffres.")
+    else:
+        q = "Explique pourquoi l'architecture 'best_overall' est recommandée, en citant les chiffres."
+    return f"Région : {region}\nDonnées calculées :\n{donnees}\n\nQuestion : {q}"
+
+
+def _texte_comparaison_simule(comparaison):
+    morceaux = []
+    comps = comparaison if isinstance(comparaison, list) else [comparaison]
+    for c in comps:
+        if not c or "erreur" in c:
+            continue
+        rec = c["recommandation"]
+        part = c["robustesse_poids_pct"].get(rec, 0)
+        t = (f"Comparaison multicritère à {c['region']} : le scénario recommandé (priorités "
+             f"équilibrées) est {rec}, premier dans {part:.0f} % des pondérations testées. ")
+        autres = [f"{p} : {n}" for p, n in c["gagnant_par_profil"].items() if n != rec]
+        if autres:
+            t += "Le gagnant change selon le profil (" + ", ".join(autres) + ")."
+        else:
+            t += "Il reste premier quel que soit le profil de priorités."
+        morceaux.append(t)
+    return " ".join(morceaux)
+
+
+def generer_explication_simulee(region, resultats, comparaison=None):
     """Texte sans API (secours)."""
     if "erreur" in resultats:
         return resultats["erreur"]
@@ -75,27 +189,34 @@ def generer_explication_simulee(region, resultats):
     else:
         txt += (f"La moins émettrice est {e['architecture']} "
                 f"({e['co2_kg_par_kg']:.2f} kg CO2/kg H2, LCOH {e['lcoh_eur_kg']:.2f} €/kg).")
+    if comparaison:
+        suite = _texte_comparaison_simule(comparaison)
+        if suite:
+            txt += " " + suite
     return txt
 
 
-def generer_explication(region, resultats, question=None, historique=None):
+def generer_explication(region, resultats, question=None, historique=None, comparaison=None):
     """
     Point d'entrée pour le frontend.
-    Essaie chaque modèle de MODELES dans l'ordre ; si tous échouent,
-    retombe sur la version simulée.
+    - question     : texte libre de l'utilisateur (sinon explication par défaut)
+    - historique   : liste [{"role": "user"/"assistant", "content": "..."}]
+    - comparaison  : résultat de comparer_scenarios(region), ou liste de résultats pour
+                     plusieurs régions (optionnel)
+    Essaie chaque modèle de MODELES ; si tous échouent, retombe sur la version simulée.
     """
     if "erreur" in resultats:
         return resultats["erreur"]
 
     cle = os.getenv("GEMINI_API_KEY")
     if not cle:
-        return generer_explication_simulee(region, resultats)
+        return generer_explication_simulee(region, resultats, comparaison)
 
     try:
         from google import genai
         from google.genai import types
     except ImportError:
-        return generer_explication_simulee(region, resultats)
+        return generer_explication_simulee(region, resultats, comparaison)
 
     contenu = []
     for m in (historique or []):
@@ -103,10 +224,9 @@ def generer_explication(region, resultats, question=None, historique=None):
         contenu.append(types.Content(role=role, parts=[types.Part(text=m["content"])]))
     contenu.append(types.Content(
         role="user",
-        parts=[types.Part(text=construire_prompt(region, resultats, question))]))
+        parts=[types.Part(text=construire_prompt(region, resultats, question, comparaison))]))
 
-    client = genai.Client(api_key=cle,
-                          http_options=types.HttpOptions(timeout=25000))
+    client = genai.Client(api_key=cle, http_options=types.HttpOptions(timeout=40000))
 
     for modele in MODELES:
         try:
@@ -115,13 +235,13 @@ def generer_explication(region, resultats, question=None, historique=None):
                 contents=contenu,
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_PROMPT,
-                    max_output_tokens=2000,
+                    max_output_tokens=6000,
                 ),
             )
             if reponse.text:
                 return reponse.text
         except Exception as err:
-            print(f"[assistant] {modele} indisponible ({type(err).__name__}), essai suivant.")
+            print(f"[assistant] {modele} indisponible ({type(err).__name__}: {str(err)[:150]}), essai suivant.")
 
     print("[assistant] Aucun modèle disponible, mode simulé.")
-    return generer_explication_simulee(region, resultats)
+    return generer_explication_simulee(region, resultats, comparaison)
