@@ -111,7 +111,7 @@ def optimiser_architecture_v1(region):
         "toutes_architectures": candidats,   # pour le Pareto et le radar
     }
     
-def optimiser_architecture(region, n_mc=0):
+def optimiser_architecture(region, n_mc=0, surcharges=None):
     """Point d'entrée utilisé par le frontend : moteur horaire."""
     from src.optimiseur import optimiser_architecture_horaire
-    return optimiser_architecture_horaire(region, n_mc=n_mc)
+    return optimiser_architecture_horaire(region, n_mc=n_mc, surcharges=surcharges)

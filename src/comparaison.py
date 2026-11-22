@@ -78,13 +78,14 @@ def _verifier_poids(poids):
         raise ValueError(f"Poids invalides : fournissez {CATEGORIES}, valeurs positives.")
 
 
-def comparer_scenarios(region, n_mc=0, profils=None, poids_perso=None, n_poids=2000, seed=0):
+def comparer_scenarios(region, n_mc=0, profils=None, poids_perso=None, n_poids=2000, seed=0,
+                       surcharges=None):
     """
     Compare les scénarios d'une région sur plusieurs critères.
     n_mc > 0 ajoute le critère de robustesse économique (Monte Carlo, ~20 s pour 200).
     poids_perso : ex. {"economique": 0.5, "environnemental": 0.3, "technique": 0.2}
     """
-    res = optimiser_architecture(region, n_mc=n_mc)
+    res = optimiser_architecture(region, n_mc=n_mc, surcharges=surcharges)
     if "erreur" in res:
         return res
 
