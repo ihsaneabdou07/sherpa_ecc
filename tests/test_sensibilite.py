@@ -47,3 +47,13 @@ def test_resume_textuel_non_vide():
     analyse = analyser_region("Dakhla", parametres=["lcoe_solaire"], n_points=3)
     lignes = resume_textuel(analyse)
     assert lignes and all(isinstance(l, str) for l in lignes)
+    
+def test_co2_eolien_est_un_parametre_analysable():
+    a = analyser_parametre("Dakhla", "co2_eolien", n_points=3)
+    assert len(a["points"]) == 3
+    assert a["valeur_base"] > 0
+
+
+def test_analyse_avec_un_autre_profil():
+    a = analyser_parametre("Dakhla", "lcoe_solaire", n_points=3, profil="economique")
+    assert a["gagnant_base"]["gagnant_compromis"] in {"Eolien", "Solaire", "Hybride"}    

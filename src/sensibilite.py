@@ -14,6 +14,7 @@ PARAMETRES = {
     "capex_mult": {"libelle": "Multiplicateur CAPEX", "plage": (0.8, 3.0)},
     "taux_interet": {"libelle": "Taux d'intérêt", "plage": (0.03, 0.12)},
     "co2_solaire": {"libelle": "Intensité carbone du solaire (kg CO2/kWh)", "plage": (0.020, 0.180)},
+    "co2_eolien": {"libelle": "Intensité carbone de l'éolien (kg CO2/kWh)", "plage": (0.005, 0.120)},
 }
 
 CRITERES_GAGNANT = {
@@ -32,6 +33,8 @@ def _valeur_base(region, parametre):
         return d["Taux_Interet"]
     if parametre == "co2_solaire":
         return d["Architectures"]["Solaire"]["CO2_kg_par_kWh"]
+    if parametre == "co2_eolien":
+        return d["Architectures"]["Eolien"]["CO2_kg_par_kWh"]
     if parametre == "capex_mult":
         return CAPEX_MULT_NOMINAL
     raise ValueError(f"Paramètre inconnu : {parametre}")
