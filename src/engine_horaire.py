@@ -7,8 +7,21 @@ from src.parametres import PARAMS as P
 CHARGE_MIN = P["charge_min"]   # en dessous, l'électrolyseur s'arrête
 
 
-def conso_specifique(charge):
-    """kWh d'électricité par kg d'H2 selon la charge (à remplacer par la fiche constructeur)."""
+def rendement_hofrichter(charge, annee):
+    """Rendement (PCI, entre 0 et 1) d'un électrolyseur PEM selon la charge (0 à 1).
+    Hofrichter et al. 2023, équations (1) et (2) corrigées (corrigendum)."""
+    p = np.asarray(charge, dtype=float) * 100.0
+    poly = (0.00005 * p**5 - 0.0061 * p**4 + 0.2372 * p**3
+            - 4.2014 * p**2 + 36.675 * p - 62.87)
+    lin = -0.149 * p + 74.977
+    eta = np.where(p < 15, poly, lin) * 1.0025 ** (annee - 2020)
+    return np.clip(eta / 100.0, 0.2, None)
+
+
+def conso_specifique(charge, annee=2020):
+    """kWh d'électricité par kg d'H2 selon la charge."""
+    if P.get("courbe_rendement", "quadratique") == "hofrichter":
+        return LHV / rendement_hofrichter(charge, annee)
     return P["conso_base"] + P["conso_coef"] * (charge - P["conso_charge_ref"]) ** 2
 
 
