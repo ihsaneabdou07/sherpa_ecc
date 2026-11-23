@@ -7,9 +7,9 @@ comps = [comparer_scenarios("Dakhla"), comparer_scenarios("Laayoune")]
 
 questions = [
     None,
-    "Pourquoi l'éolien alors que l'hybride a le CAPEX par kg le plus bas ?",
-    "Que change-t-il si je privilégie le coût plutôt que l'environnement ?",
-    "Quelle différence entre Dakhla et Laayoune ?",
+    "Quelle part du CO2 vient de la fabrication de l'électrolyseur ?",
+    "Pourquoi l'éolien alors qu'il a la plus longue interruption de production ?",
+    "À Laayoune, l'éolien est-il vraiment meilleur que l'hybride ?",
     "Quel est le prix du terrain à Dakhla ?",
 ]
 

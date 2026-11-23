@@ -23,7 +23,7 @@ CRITERES = [
 ]
 
 # Indicateurs affichés mais non notés : pénaliseraient mécaniquement le solaire (nuit)
-INFORMATIFS = ["disponibilite_pct"]
+INFORMATIFS = ["disponibilite_pct", "co2_electricite_kg_par_kg", "co2_fabrication_kg_par_kg"]
 
 # Poids par famille de critères (somme = 1). HYPOTHÈSE : à valider avec les parties prenantes.
 PROFILS = {
