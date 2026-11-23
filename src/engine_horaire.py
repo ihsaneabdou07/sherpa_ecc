@@ -25,6 +25,21 @@ def conso_specifique(charge, annee=2020):
     return P["conso_base"] + P["conso_coef"] * (charge - P["conso_charge_ref"]) ** 2
 
 
+def _plus_longue_serie(masque):
+    """Plus longue suite d'heures consécutives où le masque est vrai."""
+    m = np.concatenate(([0], np.asarray(masque).astype(int), [0]))
+    d = np.diff(m)
+    debuts = np.where(d == 1)[0]
+    fins = np.where(d == -1)[0]
+    return int((fins - debuts).max()) if len(debuts) else 0
+
+
+def _creux_mensuel(h2_horaire):
+    """Production du mois le plus faible, en % de la moyenne mensuelle (12 blocs d'heures)."""
+    mois = np.array([bloc.sum() for bloc in np.array_split(h2_horaire, 12)])
+    return float(100 * mois.min() / mois.mean()) if mois.mean() > 0 else 0.0
+
+
 def simuler(cf_horaire, p_parc_kw, ratio, lcoe, donnees, capex_mult=1.0):
     """Simule 8760 h et renvoie le LCOH et les indicateurs."""
     gen = cf_horaire.values * p_parc_kw               # kW produits chaque heure
@@ -35,7 +50,9 @@ def simuler(cf_horaire, p_parc_kw, ratio, lcoe, donnees, capex_mult=1.0):
     charge = np.where(marche, charge, 0.0)
 
     e_ely = charge * p_ely                             # kWh absorbés
-    h2_kg = np.where(marche, e_ely / conso_specifique(np.maximum(charge, 1e-9)), 0).sum()
+    h2_h = np.where(marche, e_ely / conso_specifique(np.maximum(charge, 1e-9),
+                                                     donnees["Annee_Installation"]), 0)
+    h2_kg = h2_h.sum()
     if h2_kg <= 0:
         return None
 
@@ -55,6 +72,9 @@ def simuler(cf_horaire, p_parc_kw, ratio, lcoe, donnees, capex_mult=1.0):
         "heures_marche": int(marche.sum()),
         "facteur_charge_ely": e_ely.sum() / (p_ely * 8760),
         "energie_perdue_pct": 100 * (1 - e_ely.sum() / gen.sum()),
+        "disponibilite_pct": float(100 * marche.mean()),
+        "interruption_max_h": _plus_longue_serie(~marche),
+        "mois_creux_pct": _creux_mensuel(h2_h),
     }
 
 
