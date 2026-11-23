@@ -34,10 +34,24 @@ Quand une comparaison multicritère est fournie :
   à un profil précis. Pour un profil donné, utilise uniquement le gagnant de ce profil.
 - Pour tout pourcentage d'écart, utilise uniquement les champs ecart_relatif_au_meilleur_scenario_pct
   et ecarts_entre_regions. Ne calcule jamais un écart toi-même.
-- Dis que deux valeurs sont « quasi équivalentes » seulement si l'écart fourni est inférieur à 2 %.
-  Au-delà, ne les présente pas comme équivalentes.
+- N'emploie « quasi équivalent » que pour les critères listés dans criteres_quasi_equivalents_au_meilleur.
+  Pour tout autre écart, donne le pourcentage fourni sans parler d'équivalence.
 - Ne répète le rappel des hypothèses qu'une seule fois, en une phrase courte.
 - Respecte strictement la limite de 200 mots.
+- Le CO2 total est la somme du CO2 de l'électricité et de la fabrication du stack de l'électrolyseur.
+  Il exclut les équipements annexes, le parc renouvelable, l'eau et le transport : précise-le en une
+  phrase quand tu donnes un chiffre de CO2. Pour la part de fabrication, utilise
+  part_fabrication_dans_le_co2_pct sans la recalculer.
+- La continuité de production se lit avec la plus longue interruption (en heures), le mois le plus faible
+  (en % de la moyenne mensuelle, un « mois » étant un bloc de 730 h) et la disponibilité (% d'heures de marche).
+  Ce sont des indicateurs de continuité de production, pas de fiabilité des équipements : n'emploie jamais
+  le mot « fiabilité » pour eux. Le solaire s'arrête chaque nuit : ne présente pas sa faible disponibilité
+  comme un défaut.
+  - Pour la plus longue interruption et le mois le plus faible, cite les valeurs absolues
+  (heures, % de la moyenne), jamais un pourcentage d'écart.
+- Les critères d'une même famille pèsent autant les uns que les autres. Pour expliquer le poids
+  d'un critère dans le classement, utilise criteres_actifs et poids_des_profils.
+- Écris les nombres à la française, avec une virgule décimale.
 - Réponds en français, de façon claire et concise (maximum 200 mots), sans jargon inutile."""
 
 
@@ -56,6 +70,8 @@ def _ecarts_relatifs(scenarios):
     from src.comparaison import CRITERES
     sortie = {nom: {} for nom in scenarios}
     for cle, _, _, sens in CRITERES:
+        if cle in ("interruption_max_h", "mois_creux_pct"):
+            continue
         vals = {n: s["valeurs"].get(cle) for n, s in scenarios.items()}
         if any(v is None for v in vals.values()):
             continue
@@ -90,9 +106,18 @@ def _ecarts_entre_regions(comparaison):
         sortie[f"{c['region']}_par_rapport_a_{ref['region']}"] = par_scenario
     return sortie
 
+def _part_fabrication(valeurs):
+    """Part (%) de la fabrication du stack dans le CO2 total, précalculée pour le modèle."""
+    total, fab = valeurs.get("co2_kg_par_kg"), valeurs.get("co2_fabrication_kg_par_kg")
+    if not total or fab is None:
+        return None
+    return round(100 * fab / total, 1)
+
 
 def _resume_comparaison(comparaison):
     """Accepte la comparaison d'une région (dict) ou de plusieurs (liste)."""
+    from src.comparaison import CRITERES
+    libelles = {c[0]: c[1] for c in CRITERES}
     comps = comparaison if isinstance(comparaison, list) else [comparaison]
     sortie = []
     for c in comps:
@@ -105,12 +130,18 @@ def _resume_comparaison(comparaison):
             "gagnant_par_profil": c["gagnant_par_profil"],
             "part_des_tirages_aleatoires_de_poids_gagnes_pct": c["robustesse_poids_pct"],
             "poids_des_profils": c["profils"],
+            "criteres_actifs": [{"critere": k["libelle"], "famille": k["categorie"]}
+                                for k in c["criteres"] if k["actif"]],
             "classement": {
                 p: [{"scenario": l["architecture"], "score": l["score"]} for l in lignes]
                 for p, lignes in c["classement"].items()
             },
             "scenarios": {
                 nom: {"valeurs": s["valeurs"],
+                      "part_fabrication_dans_le_co2_pct": _part_fabrication(s["valeurs"]),
+                        "criteres_quasi_equivalents_au_meilleur": [
+                          libelles[k] for k, e in ecarts[nom].items()
+                          if k in libelles and 0 < e < 2],
                       "ecart_relatif_au_meilleur_scenario_pct": ecarts[nom],
                       "points_forts": s["forces"],
                       "points_faibles": s["faiblesses"]}

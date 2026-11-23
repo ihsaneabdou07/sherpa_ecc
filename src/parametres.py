@@ -12,6 +12,9 @@ DEFAUTS = {
     "eolien_v_in": 3, "eolien_v_nom": 12, "eolien_v_out": 25,
     "part_solaire_hybride": 0.5,
     "courbe_rendement": "hofrichter",
+    "co2_stack_kg_par_kw": 137.47,
+    "duree_vie_stack_h": 60000,
+    "remplacement_stack": 1,
 }
 
 

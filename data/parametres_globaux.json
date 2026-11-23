@@ -1,4 +1,7 @@
 {
+  "co2_stack_kg_par_kw":  {"valeur": 137.47, "unite": "kg CO2-eq/kW", "statut": "publié", "source": "Wei et al., Joule 8 (2024) 3347-3372, stack PEM 1 kW, hors équipements annexes"},
+  "duree_vie_stack_h":    {"valeur": 60000,  "unite": "h",            "statut": "publié", "source": "Wei et al. 2024, Table 3 (PEM)"},
+  "remplacement_stack":   {"valeur": 1,      "unite": "0 = non, 1 = oui", "statut": "choix de modélisation", "source": "Backend : remplacement du stack selon les heures de marche"},
   "capex_facteur":        {"valeur": 1.05,   "unite": "sans unité",  "statut": "à confirmer", "source": "Eq. 3, Hofrichter et al. (à vérifier avec le PDF)"},
   "capex_coef":           {"valeur": 10719,  "unite": "€/kW",        "statut": "à confirmer", "source": "Eq. 3, Hofrichter et al. (à vérifier avec le PDF)"},
   "capex_exposant":       {"valeur": -0.299, "unite": "sans unité",  "statut": "à confirmer", "source": "Eq. 3, Hofrichter et al. (à vérifier avec le PDF)"},

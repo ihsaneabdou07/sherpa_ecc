@@ -133,11 +133,20 @@ def optimiser_architecture_horaire(region, n_mc=0, annee_meteo=2022, surcharges=
         m = _meilleur_ratio(cf, p_parc, lcoes[nom], donnees, capex_mult)
         if m is None:
             continue   # architecture sans production exploitable
+        p_ely_kw = p_parc * m["ratio_pct"] / 100
+        co2_elec = co2_kwh[nom] * m["gen_kwh"] / m["h2_kg"]
+        vie = donnees["Duree_Vie_Electrolyseur"]
+        nb_stacks = 1.0
+        if P["remplacement_stack"]:
+            nb_stacks = max(1.0, m["heures_marche"] * vie / P["duree_vie_stack_h"])
+        co2_fab = P["co2_stack_kg_par_kw"] * p_ely_kw * nb_stacks / (vie * m["h2_kg"])
         candidats.append({
             "architecture": nom,
             "lcoh_eur_kg": round(float(m["lcoh"]), 3),
-            # Émissions du parc entier rapportées au H2 produit (l'énergie perdue compte)
-            "co2_kg_par_kg": round(float(co2_kwh[nom] * m["gen_kwh"] / m["h2_kg"]), 3),
+            "co2_kg_par_kg": round(float(co2_elec + co2_fab), 3),
+            "co2_electricite_kg_par_kg": round(float(co2_elec), 3),
+            "co2_fabrication_kg_par_kg": round(float(co2_fab), 3),
+            "nb_stacks_sur_duree_vie": round(float(nb_stacks), 2),
             "eau_L_par_kg": round(EAU_M3_PAR_KG * 1000, 1),
             "trl": archis[nom]["TRL"],
             "ratio_pct": m["ratio_pct"],
