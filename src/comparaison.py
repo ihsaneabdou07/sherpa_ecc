@@ -18,7 +18,12 @@ CRITERES = [
     ("facteur_charge_electrolyseur", "Utilisation de l'électrolyseur", "technique", "max"),
     ("energie_perdue_pct", "Énergie perdue (%)", "technique", "min"),
     ("h2_tonnes_an", "Production H2 (t/an)", "technique", "max"),
+    ("interruption_max_h", "Plus longue interruption (h)", "technique", "min"),
+    ("mois_creux_pct", "Mois le plus faible (% de la moyenne)", "technique", "max"),
 ]
+
+# Indicateurs affichés mais non notés : pénaliseraient mécaniquement le solaire (nuit)
+INFORMATIFS = ["disponibilite_pct"]
 
 # Poids par famille de critères (somme = 1). HYPOTHÈSE : à valider avec les parties prenantes.
 PROFILS = {
@@ -125,7 +130,7 @@ def comparer_scenarios(region, n_mc=0, profils=None, poids_perso=None, n_poids=2
     scenarios = {}
     for i, a in enumerate(archis):
         scenarios[a["architecture"]] = {
-            "valeurs": {cle: a[cle] for cle, *_ in CRITERES if cle in a},
+            "valeurs": {cle: a[cle] for cle in [c[0] for c in CRITERES] + INFORMATIFS if cle in a},
             "scores_categories": {
                 cat: (None if np.isnan(M[i, j]) else round(float(M[i, j]), 3))
                 for j, cat in enumerate(CATEGORIES)
