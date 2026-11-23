@@ -1,5 +1,6 @@
-{  
+{
   "Dakhla": {
+    "_statut": "Valeurs provisoires issues de sources publiées, à affiner par l'équipe Data",
     "Puissance_Parc_ENR_kW": 50000,
     "Latitude": 23.68,
     "Longitude": -15.96,
@@ -9,51 +10,40 @@
     "Annee_Installation": 2026,
     "Architectures": {
       "Eolien": {
-        "LCOE": 0.028,
-        "Facteur_Charge": 0.50,
-        "CO2_kg_par_kWh": 0.011,
-        "TRL": 9
+        "LCOE": 0.030, "Facteur_Charge": 0.50, "CO2_kg_par_kWh": 0.011, "TRL": 9,
+        "_source": "LCOE : IRENA 2025 (33 USD/MWh mondial) et appels d'offres MASEN éolien (25-30 USD/MWh), à convertir en EUR. CO2 : IPCC 2014 (11 g/kWh), NREL."
       },
       "Solaire": {
-        "LCOE": 0.016,
-        "Facteur_Charge": 0.28,
-        "CO2_kg_par_kWh": 0.045,
-        "TRL": 9
+        "LCOE": 0.035, "Facteur_Charge": 0.28, "CO2_kg_par_kWh": 0.045, "TRL": 9,
+        "_source": "LCOE : IRENA 2025 (44 USD/MWh mondial ; 35-36 USD/MWh meilleurs marchés), à convertir en EUR. CO2 : NREL harmonisé (45 g/kWh), IPCC 2014 (48 g/kWh)."
       },
       "Hybride": {
-        "LCOE": 0.026,
-        "Facteur_Charge": 0.62,
-        "CO2_kg_par_kWh": 0.025,
-        "TRL": 8
+        "LCOE": 0.026, "Facteur_Charge": 0.62, "CO2_kg_par_kWh": 0.025, "TRL": 8,
+        "_source": "LCOE et CO2 recalculés par le moteur (pondération par l'énergie). Étude Dakhla (Achbab 2024) : environ 0,045 USD/kWh, à comparer."
       }
     }
   },
   "Laayoune": {
+    "_statut": "Valeurs provisoires issues de sources publiées, à affiner par l'équipe Data",
     "Puissance_Parc_ENR_kW": 50000,
     "Latitude": 27.15,
     "Longitude": -13.20,
-    "Cout_Eau": 0.8,
+    "Cout_Eau": 0.9,
     "Taux_Interet": 0.05,
     "Duree_Vie_Electrolyseur": 20,
     "Annee_Installation": 2026,
     "Architectures": {
       "Eolien": {
-        "LCOE": 0.028,
-        "Facteur_Charge": 0.50,
-        "CO2_kg_par_kWh": 0.011,
-        "TRL": 9
+        "LCOE": 0.030, "Facteur_Charge": 0.45, "CO2_kg_par_kWh": 0.011, "TRL": 9,
+        "_source": "Mêmes sources que Dakhla. Pas de LCOE spécifique au site : la météo NASA différencie les sites."
       },
       "Solaire": {
-        "LCOE": 0.016,
-        "Facteur_Charge": 0.28,
-        "CO2_kg_par_kWh": 0.045,
-        "TRL": 9
+        "LCOE": 0.035, "Facteur_Charge": 0.27, "CO2_kg_par_kWh": 0.045, "TRL": 9,
+        "_source": "Mêmes sources que Dakhla. Pas de LCOE spécifique au site."
       },
       "Hybride": {
-        "LCOE": 0.026,
-        "Facteur_Charge": 0.62,
-        "CO2_kg_par_kWh": 0.025,
-        "TRL": 8
+        "LCOE": 0.027, "Facteur_Charge": 0.60, "CO2_kg_par_kWh": 0.025, "TRL": 8,
+        "_source": "Recalculé par le moteur."
       }
     }
   }

@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import requests
+from src.parametres import PARAMS as P
 
 
 def telecharger_meteo(lat, lon, annee=2022, nom="dakhla"):
@@ -29,18 +30,24 @@ def telecharger_meteo(lat, lon, annee=2022, nom="dakhla"):
     return df
 
 
-def profil_solaire(df, pr=0.80):
+def profil_solaire(df, pr=None):
     """Facteur de charge horaire du solaire (0 à 1). pr = performance ratio."""
+    pr = P["pr_solaire"] if pr is None else pr
     return (df["ghi"] / 1000 * pr).clip(0, 1)
 
 
-def profil_eolien(df, hauteur=100, v_in=3, v_nom=12, v_out=25):
+def profil_eolien(df, hauteur=None, v_in=None, v_nom=None, v_out=None):
     """Facteur de charge horaire de l'éolien (courbe de puissance simplifiée)."""
-    v = df["vent50"] * (hauteur / 50) ** 0.14   # extrapolation en hauteur
+    hauteur = P["eolien_hauteur"] if hauteur is None else hauteur
+    v_in = P["eolien_v_in"] if v_in is None else v_in
+    v_nom = P["eolien_v_nom"] if v_nom is None else v_nom
+    v_out = P["eolien_v_out"] if v_out is None else v_out
+    v = df["vent50"] * (hauteur / 50) ** P["eolien_cisaillement"]
     cf = (((v - v_in) / (v_nom - v_in)) ** 3).clip(0, 1)
     cf[(v < v_in) | (v > v_out)] = 0
     return cf
 
 
-def profil_hybride(df, part_solaire=0.5):
-    return part_solaire * profil_solaire(df) + (1 - part_solaire) * profil_eolien(df)
+def profil_hybride(df, part_solaire=None):
+    part = P["part_solaire_hybride"] if part_solaire is None else part_solaire
+    return part * profil_solaire(df) + (1 - part) * profil_eolien(df)

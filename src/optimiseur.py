@@ -1,13 +1,20 @@
+import copy
+
 import numpy as np
 from src.engine import charger_donnees, LHV, EAU_M3_PAR_KG
 from src.engine_horaire import simuler
 from src.meteo import telecharger_meteo, profil_solaire, profil_eolien
+from src.parametres import PARAMS as P
 
 # HYPOTHÈSE : multiplicateur CAPEX nominal (centre de la plage 1 à 2,5 du Monte Carlo).
 # À valider avec l'équipe Data et l'article de Hofrichter.
-CAPEX_MULT_NOMINAL = 1.75
+CAPEX_MULT_NOMINAL = P["capex_mult_nominal"]
 RATIOS = range(10, 151, 5)
-PART_SOLAIRE = 0.5
+PART_SOLAIRE = P["part_solaire_hybride"]
+
+# Paramètres que l'on peut modifier pour une analyse de sensibilité
+SURCHARGES_VALIDES = {"lcoe_solaire", "lcoe_eolien", "capex_mult", "taux_interet",
+                      "co2_solaire", "co2_eolien"}
 
 
 def _poids_solaire(cf_sol, cf_vent):
@@ -63,17 +70,40 @@ def _monte_carlo(profils, lcoe_sol, lcoe_vent, cf_sol, cf_vent, donnees, p_parc,
     return out
 
 
-def optimiser_architecture_horaire(region, n_mc=0, annee_meteo=2022):
+def optimiser_architecture_horaire(region, n_mc=0, annee_meteo=2022, surcharges=None):
     """
     Même format de sortie que l'ancienne version.
     n_mc = 0   : rapide (déterministe), pour l'interface.
     n_mc = 200 : ajoute P10/P50/P90 et la probabilité d'être le moins cher (~20 s).
+    surcharges : dict optionnel pour l'analyse de sensibilité, par exemple
+                 {"lcoe_solaire": 0.025, "capex_mult": 2.0}. Clés valides :
+                 lcoe_solaire, lcoe_eolien, capex_mult, taux_interet, co2_solaire, co2_eolien.
     """
+    surcharges = surcharges or {}
+    inconnues = set(surcharges) - SURCHARGES_VALIDES
+    if inconnues:
+        return {"erreur": f"Surcharges inconnues : {sorted(inconnues)}"}
+
     donnees = charger_donnees(region)
     if not donnees:
         return {"erreur": f"Région '{region}' non trouvée"}
     if "Latitude" not in donnees or "Longitude" not in donnees:
         return {"erreur": f"Coordonnées manquantes pour '{region}' dans le JSON"}
+
+    # Copie : les surcharges ne modifient jamais le fichier de données
+    donnees = copy.deepcopy(donnees)
+    archis = donnees["Architectures"]
+    if "taux_interet" in surcharges:
+        donnees["Taux_Interet"] = float(surcharges["taux_interet"])
+    if "lcoe_solaire" in surcharges:
+        archis["Solaire"]["LCOE"] = float(surcharges["lcoe_solaire"])
+    if "lcoe_eolien" in surcharges:
+        archis["Eolien"]["LCOE"] = float(surcharges["lcoe_eolien"])
+    if "co2_solaire" in surcharges:
+        archis["Solaire"]["CO2_kg_par_kWh"] = float(surcharges["co2_solaire"])
+    if "co2_eolien" in surcharges:
+        archis["Eolien"]["CO2_kg_par_kWh"] = float(surcharges["co2_eolien"])
+    capex_mult = float(surcharges.get("capex_mult", CAPEX_MULT_NOMINAL))
 
     df = telecharger_meteo(donnees["Latitude"], donnees["Longitude"],
                            annee=annee_meteo, nom=region.lower())
@@ -85,7 +115,6 @@ def optimiser_architecture_horaire(region, n_mc=0, annee_meteo=2022):
     }
 
     p_parc = donnees["Puissance_Parc_ENR_kW"]
-    archis = donnees["Architectures"]
     lcoe_sol, lcoe_vent = archis["Solaire"]["LCOE"], archis["Eolien"]["LCOE"]
     lcoes = {"Eolien": lcoe_vent, "Solaire": lcoe_sol,
              "Hybride": _lcoe_hybride(lcoe_sol, lcoe_vent, cf_sol, cf_vent)}
@@ -101,7 +130,7 @@ def optimiser_architecture_horaire(region, n_mc=0, annee_meteo=2022):
 
     candidats = []
     for nom, cf in profils.items():
-        m = _meilleur_ratio(cf, p_parc, lcoes[nom], donnees, CAPEX_MULT_NOMINAL)
+        m = _meilleur_ratio(cf, p_parc, lcoes[nom], donnees, capex_mult)
         if m is None:
             continue   # architecture sans production exploitable
         candidats.append({
@@ -115,7 +144,15 @@ def optimiser_architecture_horaire(region, n_mc=0, annee_meteo=2022):
             "puissance_kw": round(p_parc * m["ratio_pct"] / 100),
             "h2_tonnes_an": round(float(m["h2_kg"]) / 1000, 1),
             "facteur_charge_parc": round(float(cf.mean()), 3),
+            "disponibilite_pct": round(float(m["disponibilite_pct"]), 1),
+            "interruption_max_h": int(m["interruption_max_h"]),
+            "mois_creux_pct": round(float(m["mois_creux_pct"]), 1),
             "energie_perdue_pct": round(float(m["energie_perdue_pct"]), 1),
+            "capex_meur": round(float(m["capex_eur"]) / 1e6, 2),
+            "capex_par_kg_h2_an": round(float(m["capex_eur"]) / float(m["h2_kg"]), 2),
+            "cout_annuel_meur": round(float(m["cout_annuel_eur"]) / 1e6, 2),
+            "heures_marche": int(m["heures_marche"]),
+            "facteur_charge_electrolyseur": round(float(m["facteur_charge_ely"]), 3),
         })
 
     if not candidats:

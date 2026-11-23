@@ -1,14 +1,14 @@
 import json
 import os
+from src.parametres import PARAMS as P
 
 # ---------- Constantes ----------
-LHV = 33.33            # kWh/kg : pouvoir calorifique inférieur de l'H2
-EFFICACITE = 0.62      # rendement moyen de l'électrolyseur (MVP : constant)
-EAU_M3_PAR_KG = 0.015  # m3 d'eau par kg d'H2
-OPEX_PCT = 0.025       # maintenance = 2,5 % du CAPEX / an
-ASSURANCE = 1.01       # +1 % (Eq. 6)
+LHV = P["lhv_kwh_par_kg"]       # kWh/kg : pouvoir calorifique inférieur de l'H2
+EFFICACITE = 0.62               # utilisé seulement par l'ancienne version v1
+EAU_M3_PAR_KG = P["eau_m3_par_kg"]
+OPEX_PCT = P["opex_pct"]
+ASSURANCE = P["assurance"]
 HEURES_AN = 8760
-
 
 def charger_donnees(region):
     """Lit le fichier JSON (sera remplacé par l'Excel de l'équipe Data)."""
@@ -19,8 +19,9 @@ def charger_donnees(region):
 
 
 def calculer_capex(puissance_kw, annee):
-    """Eq. 3 : CAPEX total de l'électrolyseur en euros."""
-    cout_par_kw = 1.05 * (10719 * puissance_kw ** -0.299) * (0.98 ** (annee - 2020))
+    """Eq. 3 : CAPEX total de l'électrolyseur en euros (paramètres dans parametres_globaux.json)."""
+    cout_par_kw = (P["capex_facteur"] * (P["capex_coef"] * puissance_kw ** P["capex_exposant"])
+                   * (P["capex_baisse_annuelle"] ** (annee - P["capex_annee_ref"])))
     return cout_par_kw * puissance_kw
 
 
@@ -110,7 +111,7 @@ def optimiser_architecture_v1(region):
         "toutes_architectures": candidats,   # pour le Pareto et le radar
     }
     
-def optimiser_architecture(region, n_mc=0):
+def optimiser_architecture(region, n_mc=0, surcharges=None):
     """Point d'entrée utilisé par le frontend : moteur horaire."""
     from src.optimiseur import optimiser_architecture_horaire
-    return optimiser_architecture_horaire(region, n_mc=n_mc)
+    return optimiser_architecture_horaire(region, n_mc=n_mc, surcharges=surcharges)
