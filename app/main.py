@@ -8,6 +8,8 @@ from .engine.simulator import load_defaults, run_scenario_simulation
 from src.ai_assistant import generer_explication
 from src.comparaison import comparer_scenarios
 from src.engine import optimiser_architecture
+from fastapi.responses import StreamingResponse
+from .engine.excel_exporter import build_native_excel_report
 
 app = FastAPI(title="H2-Maroc Decision Studio API", version="1.3.0")
 
@@ -140,6 +142,44 @@ class ChatRequest(BaseModel):
     annual_production_tonnes: Optional[float] = None
     lang: str = "fr"
     history: Optional[List[ChatHistoryItem]] = None
+    
+    
+class ExportExcelRequest(BaseModel):
+    region: str = "Dakhla-Oued Eddahab"
+    city: Optional[str] = None
+    target_product: str = "e-Methanol"
+    annual_production_tonnes: float = 100000
+    lang: str = "fr"
+
+
+@app.post("/studio/export-excel")
+def studio_export_excel(req: ExportExcelRequest):
+    sim_data = recommend_architectures(
+        StudioRequest(
+            region=req.region,
+            city=req.city,
+            target_product=req.target_product,
+            annual_production_tonnes=req.annual_production_tonnes,
+        )
+    )
+    excel_stream = build_native_excel_report(
+        region=sim_data["region"],
+        city=sim_data["city"],
+        target_product=req.target_product,
+        annual_production_tonnes=req.annual_production_tonnes,
+        architectures=sim_data["architectures"],
+        sensitivity_curve=sim_data["sensitivity_curve"],
+        pareto_others=sim_data["pareto_others"],
+        lang=req.lang,
+    )
+    loc_slug = _norm(req.city or req.region).replace(" ", "_")
+    prod_slug = _norm(req.target_product).replace(" ", "_")
+    filename = f"sherpa_h2_{loc_slug}_{prod_slug}.xlsx"
+    return StreamingResponse(
+        excel_stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _build_fallback_resultats(architectures: List[dict], annual_tonnes: float) -> dict:

@@ -43,6 +43,7 @@ interface ArchitectureItem {
   water: number;
   trl: string;
   radar: RadarScores;
+  assumptions?: Record<string, string | number>;
 }
 
 interface ParetoPoint {
@@ -191,6 +192,69 @@ export function App() {
       setChatInput("");
     }
     await askAssistant(q, studioData.architectures, apiRegion, targetProduct, false, lang, production, selectedCity);
+  }
+
+  function triggerDownload(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function getExportSlug() {
+    const raw = selectedCity ? `${selectedCity}_${regionName}` : regionName;
+    return raw
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9_-]+/g, "_")
+      .toLowerCase();
+  }
+
+  function handleExportJson() {
+    if (!studioData) return;
+    const payload = {
+      exported_at: new Date().toISOString(),
+      project: {
+        region: regionName,
+        city: selectedCity || null,
+        target_product: targetProduct,
+        annual_production_tonnes: production,
+      },
+      architectures: studioData.architectures,
+      sensitivity_curve: studioData.sensitivity_curve ?? [],
+      pareto_others: studioData.pareto_others ?? [],
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+    triggerDownload(blob, `sherpa_h2_${getExportSlug()}_${targetProduct.toLowerCase()}.json`);
+  }
+
+  async function handleExportExcel() {
+    if (!studioData) return;
+    try {
+      const res = await fetch(`${API_BASE}/studio/export-excel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          region: apiRegion,
+          city: selectedCity || undefined,
+          target_product: targetProduct,
+          annual_production_tonnes: production,
+          lang,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      triggerDownload(blob, `sherpa_h2_${getExportSlug()}_${targetProduct.toLowerCase()}.xlsx`);
+    } catch (err) {
+      console.error("Erreur Export Excel:", err);
+      setApiError(t.apiRecommendError);
+    }
   }
 
   const selectedArch =
@@ -441,20 +505,62 @@ export function App() {
               <h3 style={{ margin: 0, fontSize: 15, lineHeight: 1.35 }}>
                 ⚡ {t.recommendedTitle} — <span style={{ color: "#047857" }}>{currentDisplayLocation}</span>
               </h3>
-              {selectedArch && (
-                <span
-                  style={{
-                    fontSize: 11.5,
-                    color: "#334155",
-                    background: "#f8fafc",
-                    border: "1px solid #e2e8f0",
-                    padding: "3px 9px",
-                    borderRadius: 999,
-                  }}
-                >
-                  {t.focusLabel} : <strong style={{ color: selectedArch.color }}>#{selectedArch.rank} {selectedArch.badge}</strong>
-                </span>
-              )}
+
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                {selectedArch && (
+                  <span
+                    style={{
+                      fontSize: 11.5,
+                      color: "#334155",
+                      background: "#f8fafc",
+                      border: "1px solid #e2e8f0",
+                      padding: "3px 9px",
+                      borderRadius: 999,
+                    }}
+                  >
+                    {t.focusLabel} : <strong style={{ color: selectedArch.color }}>#{selectedArch.rank} {selectedArch.badge}</strong>
+                  </span>
+                )}
+
+                {studioData && (
+                  <div style={{ display: "inline-flex", gap: 6 }}>
+                    <button
+                      type="button"
+                      onClick={handleExportExcel}
+                      title={lang === "en" ? "Export detailed styled workbook (.xlsx)" : "Exporter le classeur Excel détaillé (.xlsx)"}
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: 600,
+                        color: "#047857",
+                        background: "#ecfdf5",
+                        border: "1px solid #a7f3d0",
+                        padding: "3px 9px",
+                        borderRadius: 8,
+                        cursor: "pointer",
+                      }}
+                    >
+                      📊 {lang === "en" ? "Export Excel (.xlsx)" : "Exporter Excel (.xlsx)"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportJson}
+                      title={lang === "en" ? "Export full analysis as JSON" : "Exporter l'analyse complète en JSON"}
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: 600,
+                        color: "#334155",
+                        background: "#f8fafc",
+                        border: "1px solid #cbd5e1",
+                        padding: "3px 9px",
+                        borderRadius: 8,
+                        cursor: "pointer",
+                      }}
+                    >
+                      📥 JSON
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {apiError && (
