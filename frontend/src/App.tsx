@@ -9,6 +9,21 @@ const API_BASE = "http://127.0.0.1:8000";
 
 const typedGeoJson = moroccoGeoJson as FeatureCollection<Geometry, RegionProperties>;
 
+const CITIES_BY_REGION: Record<string, string[]> = {
+  "Dakhla-Oued Eddahab": ["Dakhla"],
+  "Laâyoune-Sakia El Hamra": ["Laâyoune", "Boujdour"],
+  "Guelmim-Oued Noun": ["Tan-Tan", "Guelmim"],
+  "Souss-Massa": ["Agadir"],
+  "Marrakech-Safi": ["Safi", "Essaouira", "Marrakech"],
+  "Drâa-Tafilalet": ["Ouarzazate"],
+  "Casablanca-Settat": ["Jorf Lasfar", "Casablanca", "Mohammedia"],
+  "Rabat-Salé-Kénitra": ["Kénitra", "Rabat"],
+  "Tanger-Tétouan-Al Hoceïma": ["Tanger"],
+  "Oriental": ["Nador", "Oujda"],
+  "Fès-Meknès": ["Fès"],
+  "Béni Mellal-Khénifra": ["Béni Mellal"],
+};
+
 interface RadarScores {
   cost_score: number;
   co2_score: number;
@@ -53,6 +68,7 @@ export function App() {
 
   const [regionName, setRegionName] = useState("Dakhla-Oued Eddahab");
   const [apiRegion, setApiRegion] = useState("Dakhla-Oued Eddahab");
+  const [selectedCity, setSelectedCity] = useState<string>("");
   const [targetProduct, setTargetProduct] = useState("e-Methanol");
   const [production, setProduction] = useState(100000);
   const [studioData, setStudioData] = useState<StudioRecommendResponse | null>(null);
@@ -71,10 +87,15 @@ export function App() {
     prod = targetProduct,
     resetHistory = false,
     currentLang = lang,
-    qty = production
+    qty = production,
+    city = selectedCity
   ) {
     const activeT = translations[currentLang];
     setChatLoading(true);
+    const historyPayload = resetHistory
+      ? []
+      : messages.map((m) => ({ role: m.role, content: m.text }));
+
     if (resetHistory) {
       setMessages([{ role: "user", text: question }]);
     } else {
@@ -88,10 +109,12 @@ export function App() {
         body: JSON.stringify({
           question,
           region: pole,
+          city: city || undefined,
           target_product: prod,
           architectures,
           annual_production_tonnes: qty,
           lang: currentLang,
+          history: historyPayload,
         }),
       });
       if (!chatRes.ok) {
@@ -117,11 +140,12 @@ export function App() {
   }
 
   async function fetchRecommendations(
-    displayReg = regionName,
+    displayLocation = regionName,
     pole = apiRegion,
     prod = targetProduct,
     qty = production,
-    currentLang = lang
+    currentLang = lang,
+    city = selectedCity
   ) {
     const activeT = translations[currentLang];
     setLoading(true);
@@ -132,6 +156,7 @@ export function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           region: pole,
+          city: city || undefined,
           target_product: prod,
           annual_production_tonnes: qty,
         }),
@@ -145,8 +170,8 @@ export function App() {
       const firstArch = data.architectures?.[0] ?? null;
       setSelectedArchId(firstArch ? firstArch.id : null);
 
-      const defaultQ = activeT.defaultQuestion(displayReg);
-      await askAssistant(defaultQ, data.architectures ?? [], pole, prod, true, currentLang, qty);
+      const defaultQ = activeT.defaultQuestion(displayLocation);
+      await askAssistant(defaultQ, data.architectures ?? [], pole, prod, true, currentLang, qty, city);
     } catch (err) {
       console.error("Erreur API:", err);
       setApiError(activeT.apiRecommendError);
@@ -165,13 +190,15 @@ export function App() {
     if (!customQuestion) {
       setChatInput("");
     }
-    await askAssistant(q, studioData.architectures, apiRegion, targetProduct, false, lang, production);
+    await askAssistant(q, studioData.architectures, apiRegion, targetProduct, false, lang, production, selectedCity);
   }
 
   const selectedArch =
     studioData?.architectures.find((a) => a.id === selectedArchId) ??
     studioData?.architectures[0] ??
     null;
+
+  const currentDisplayLocation = selectedCity ? `${selectedCity} (${regionName})` : regionName;
 
   return (
     <div style={{ minHeight: "100vh", background: "#f1f5f9", fontFamily: "Inter, system-ui, sans-serif", color: "#0f172a" }}>
@@ -306,9 +333,42 @@ export function App() {
             onSelectRegion={(name, pole) => {
               setRegionName(name);
               setApiRegion(pole);
-              fetchRecommendations(name, pole, targetProduct, production, lang);
+              setSelectedCity("");
+              fetchRecommendations(name, pole, targetProduct, production, lang, "");
             }}
           />
+
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#475569", margin: "12px 0 6px" }}>
+            🏙️ {lang === "en" ? "City / Industrial hub (optional)" : "Ville / Pôle industriel (optionnel)"}
+          </div>
+          <select
+            value={selectedCity}
+            onChange={(e) => {
+              const nextCity = e.target.value;
+              setSelectedCity(nextCity);
+              const foundRegion =
+                Object.entries(CITIES_BY_REGION).find(([, cities]) => cities.includes(nextCity))?.[0] ??
+                regionName;
+              setRegionName(foundRegion);
+              setApiRegion(foundRegion);
+              const label = nextCity ? `${nextCity} (${foundRegion})` : foundRegion;
+              fetchRecommendations(label, foundRegion, targetProduct, production, lang, nextCity);
+            }}
+            style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13 }}
+          >
+            <option value="">
+              {lang === "en" ? `All region (${regionName})` : `Toute la région (${regionName})`}
+            </option>
+            {Object.entries(CITIES_BY_REGION).map(([reg, cities]) => (
+              <optgroup key={reg} label={reg}>
+                {cities.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
 
           <div style={{ fontSize: 12, fontWeight: 600, color: "#475569", margin: "16px 0 6px" }}>🧪 {t.targetProduct}</div>
           <select
@@ -316,7 +376,7 @@ export function App() {
             onChange={(e) => {
               const nextProd = e.target.value;
               setTargetProduct(nextProd);
-              fetchRecommendations(regionName, apiRegion, nextProd, production, lang);
+              fetchRecommendations(currentDisplayLocation, apiRegion, nextProd, production, lang, selectedCity);
             }}
             style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13 }}
           >
@@ -342,7 +402,7 @@ export function App() {
 
           <button
             type="button"
-            onClick={() => fetchRecommendations(regionName, apiRegion, targetProduct, production, lang)}
+            onClick={() => fetchRecommendations(currentDisplayLocation, apiRegion, targetProduct, production, lang, selectedCity)}
             disabled={loading}
             style={{
               marginTop: 18,
@@ -379,7 +439,7 @@ export function App() {
               }}
             >
               <h3 style={{ margin: 0, fontSize: 15, lineHeight: 1.35 }}>
-                ⚡ {t.recommendedTitle} — <span style={{ color: "#047857" }}>{regionName}</span>
+                ⚡ {t.recommendedTitle} — <span style={{ color: "#047857" }}>{currentDisplayLocation}</span>
               </h3>
               {selectedArch && (
                 <span

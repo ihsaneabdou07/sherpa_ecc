@@ -1,11 +1,15 @@
+import unicodedata
 from typing import List, Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from .schemas import ScenarioInput, ScenarioOutput
 from .engine.simulator import load_defaults, run_scenario_simulation
+from src.ai_assistant import generer_explication
+from src.comparaison import comparer_scenarios
+from src.engine import optimiser_architecture
 
-app = FastAPI(title="H2-Maroc Decision Studio API", version="1.1.0")
+app = FastAPI(title="H2-Maroc Decision Studio API", version="1.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,13 +19,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 1. Profils des 12 régions administratives du Maroc
 REGION_PROFILES = {
-    "Dakhla-Oued Eddahab": {"lcoe": 0.024, "flh_res": 4300, "desal_share": 0.90},
-    "Laâyoune": {"lcoe": 0.026, "flh_res": 4050, "desal_share": 0.85},
-    "Laâyoune-Sakia El Hamra": {"lcoe": 0.026, "flh_res": 4050, "desal_share": 0.85},
-    "Souss-Massa": {"lcoe": 0.031, "flh_res": 3400, "desal_share": 0.75},
-    "Casablanca-Settat": {"lcoe": 0.035, "flh_res": 2950, "desal_share": 0.60},
+    "Tanger-Tétouan-Al Hoceïma": {"lcoe": 0.029, "flh_res": 3650, "desal_share": 0.70},
     "Oriental": {"lcoe": 0.030, "flh_res": 3550, "desal_share": 0.65},
+    "Fès-Meknès": {"lcoe": 0.033, "flh_res": 3150, "desal_share": 0.25},
+    "Rabat-Salé-Kénitra": {"lcoe": 0.034, "flh_res": 3050, "desal_share": 0.55},
+    "Béni Mellal-Khénifra": {"lcoe": 0.032, "flh_res": 3250, "desal_share": 0.20},
+    "Casablanca-Settat": {"lcoe": 0.035, "flh_res": 2950, "desal_share": 0.60},
+    "Marrakech-Safi": {"lcoe": 0.030, "flh_res": 3500, "desal_share": 0.65},
+    "Drâa-Tafilalet": {"lcoe": 0.027, "flh_res": 3850, "desal_share": 0.30},
+    "Souss-Massa": {"lcoe": 0.031, "flh_res": 3400, "desal_share": 0.75},
+    "Guelmim-Oued Noun": {"lcoe": 0.026, "flh_res": 3950, "desal_share": 0.85},
+    "Laâyoune-Sakia El Hamra": {"lcoe": 0.025, "flh_res": 4100, "desal_share": 0.88},
+    "Dakhla-Oued Eddahab": {"lcoe": 0.024, "flh_res": 4300, "desal_share": 0.90},
+}
+
+# 2. Catalogue des villes / pôles industriels et portuaires
+CITY_PROFILES = {
+    "Dakhla": {"region": "Dakhla-Oued Eddahab", "lcoe": 0.024, "flh_res": 4300, "desal_share": 0.90, "engine_key": "Dakhla"},
+    "Laâyoune": {"region": "Laâyoune-Sakia El Hamra", "lcoe": 0.025, "flh_res": 4100, "desal_share": 0.88, "engine_key": "Laayoune"},
+    "Boujdour": {"region": "Laâyoune-Sakia El Hamra", "lcoe": 0.0245, "flh_res": 4180, "desal_share": 0.90},
+    "Tan-Tan": {"region": "Guelmim-Oued Noun", "lcoe": 0.0255, "flh_res": 4000, "desal_share": 0.88},
+    "Guelmim": {"region": "Guelmim-Oued Noun", "lcoe": 0.0265, "flh_res": 3900, "desal_share": 0.80},
+    "Agadir": {"region": "Souss-Massa", "lcoe": 0.031, "flh_res": 3400, "desal_share": 0.80},
+    "Safi": {"region": "Marrakech-Safi", "lcoe": 0.029, "flh_res": 3620, "desal_share": 0.85},
+    "Essaouira": {"region": "Marrakech-Safi", "lcoe": 0.028, "flh_res": 3750, "desal_share": 0.85},
+    "Marrakech": {"region": "Marrakech-Safi", "lcoe": 0.031, "flh_res": 3420, "desal_share": 0.35},
+    "Ouarzazate": {"region": "Drâa-Tafilalet", "lcoe": 0.026, "flh_res": 3920, "desal_share": 0.25},
+    "Jorf Lasfar": {"region": "Casablanca-Settat", "lcoe": 0.033, "flh_res": 3100, "desal_share": 0.85},
+    "Casablanca": {"region": "Casablanca-Settat", "lcoe": 0.035, "flh_res": 2950, "desal_share": 0.65},
+    "Mohammedia": {"region": "Casablanca-Settat", "lcoe": 0.0345, "flh_res": 2980, "desal_share": 0.75},
+    "Kénitra": {"region": "Rabat-Salé-Kénitra", "lcoe": 0.0335, "flh_res": 3080, "desal_share": 0.65},
+    "Rabat": {"region": "Rabat-Salé-Kénitra", "lcoe": 0.034, "flh_res": 3050, "desal_share": 0.65},
+    "Tanger": {"region": "Tanger-Tétouan-Al Hoceïma", "lcoe": 0.0285, "flh_res": 3720, "desal_share": 0.80},
+    "Nador": {"region": "Oriental", "lcoe": 0.0295, "flh_res": 3600, "desal_share": 0.80},
+    "Oujda": {"region": "Oriental", "lcoe": 0.0305, "flh_res": 3500, "desal_share": 0.45},
+    "Fès": {"region": "Fès-Meknès", "lcoe": 0.033, "flh_res": 3150, "desal_share": 0.25},
+    "Béni Mellal": {"region": "Béni Mellal-Khénifra", "lcoe": 0.032, "flh_res": 3250, "desal_share": 0.20},
+}
+
+STUDIO_TO_ENGINE_REGION = {
+    "Dakhla-Oued Eddahab": "Dakhla",
+    "Dakhla": "Dakhla",
+    "Laâyoune": "Laayoune",
+    "Laayoune": "Laayoune",
+    "Laâyoune-Sakia El Hamra": "Laayoune",
 }
 
 PRODUCT_FACTORS = {
@@ -31,38 +74,134 @@ PRODUCT_FACTORS = {
     "e-Methane": {"unit": "MAD/L", "cost_mult": 0.31, "co2_mult": 0.45, "water_mult": 1.9, "trl": "TRL 7-8"},
 }
 
+
+def _norm(text: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFD", text.strip().lower())
+        if unicodedata.category(c) != "Mn"
+    )
+
+
+def _resolve_location(location: str) -> dict:
+    """Résout une région ou une ville vers son profil énergétique complet."""
+    target = _norm(location)
+    for city_name, cfg in CITY_PROFILES.items():
+        if _norm(city_name) == target:
+            return {
+                "display_name": city_name,
+                "region": cfg["region"],
+                "city": city_name,
+                "lcoe": cfg["lcoe"],
+                "flh_res": cfg["flh_res"],
+                "desal_share": cfg["desal_share"],
+                "engine_key": cfg.get("engine_key"),
+            }
+    for reg_name, cfg in REGION_PROFILES.items():
+        if _norm(reg_name) == target:
+            return {
+                "display_name": reg_name,
+                "region": reg_name,
+                "city": None,
+                "lcoe": cfg["lcoe"],
+                "flh_res": cfg["flh_res"],
+                "desal_share": cfg["desal_share"],
+                "engine_key": STUDIO_TO_ENGINE_REGION.get(reg_name),
+            }
+    default_cfg = REGION_PROFILES["Dakhla-Oued Eddahab"]
+    return {
+        "display_name": location,
+        "region": "Dakhla-Oued Eddahab",
+        "city": None,
+        "lcoe": default_cfg["lcoe"],
+        "flh_res": default_cfg["flh_res"],
+        "desal_share": default_cfg["desal_share"],
+        "engine_key": "Dakhla",
+    }
+
+
 class StudioRequest(BaseModel):
     region: str = "Dakhla-Oued Eddahab"
+    city: Optional[str] = None
     target_product: str = "e-Methanol"
     annual_production_tonnes: float = 100000
+
+
+class ChatHistoryItem(BaseModel):
+    role: str
+    content: str
+
 
 class ChatRequest(BaseModel):
     question: str
     region: str
+    city: Optional[str] = None
     target_product: str
     architectures: List[dict]
     annual_production_tonnes: Optional[float] = None
     lang: str = "fr"
+    history: Optional[List[ChatHistoryItem]] = None
+
+
+def _build_fallback_resultats(architectures: List[dict], annual_tonnes: float) -> dict:
+    cap_kw = round(max(20000.0, min(1500000.0, annual_tonnes)), 1)
+    ratios = [75, 90, 65]
+    entries = []
+    for idx, arch in enumerate(architectures[:3]):
+        entries.append({
+            "architecture": arch.get("badge", f"Architecture {idx + 1}"),
+            "lcoh_eur_kg": float(arch.get("cost", 0.0)),
+            "co2_kg_par_kg": float(arch.get("co2", 0.0)),
+            "ratio_pct": ratios[idx] if idx < len(ratios) else 75,
+            "puissance_kw": cap_kw,
+        })
+    while len(entries) < 3:
+        entries.append(entries[-1] if entries else {
+            "architecture": "Best overall",
+            "lcoh_eur_kg": 0.0,
+            "co2_kg_par_kg": 0.0,
+            "ratio_pct": 75,
+            "puissance_kw": cap_kw,
+        })
+    return {
+        "best_overall": entries[0],
+        "lowest_cost": entries[1],
+        "lowest_co2": entries[2],
+        "toutes_architectures": entries,
+    }
+
 
 @app.get("/")
 def root():
     return {"message": "H2-Maroc Decision Studio API is running", "docs": "/docs"}
 
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
 
 @app.get("/defaults")
 def get_defaults():
     return load_defaults()
 
+
+@app.get("/locations")
+def get_locations():
+    """Retourne les 12 régions et les villes rattachées."""
+    cities_by_region = {r: [] for r in REGION_PROFILES}
+    for city, cfg in CITY_PROFILES.items():
+        cities_by_region[cfg["region"]].append(city)
+    return {"regions": list(REGION_PROFILES.keys()), "cities_by_region": cities_by_region}
+
+
 @app.post("/scenarios/simulate", response_model=ScenarioOutput)
 def simulate_scenario(payload: ScenarioInput):
     return run_scenario_simulation(payload.model_dump())
 
+
 @app.post("/studio/recommend")
 def recommend_architectures(req: StudioRequest):
-    reg = REGION_PROFILES.get(req.region, REGION_PROFILES["Dakhla-Oued Eddahab"])
+    loc = _resolve_location(req.city if req.city else req.region)
     prod = PRODUCT_FACTORS.get(req.target_product, PRODUCT_FACTORS["e-Methanol"])
     cap_mw = max(20.0, min(1500.0, req.annual_production_tonnes / 1000.0))
 
@@ -78,12 +217,12 @@ def recommend_architectures(req: StudioRequest):
             "scenario_name": label,
             "ely_res_ratio": ratio,
             "electrolyzer_capacity_mw": cap_mw,
-            "local_lcoe_eur_per_kwh": reg["lcoe"],
-            "flh_res_hours": reg["flh_res"],
+            "local_lcoe_eur_per_kwh": loc["lcoe"],
+            "flh_res_hours": loc["flh_res"],
             "storage_duration_hours": storage_h,
             "ev_smart_charging_share": ev_share,
             "water_efficiency_factor": water_eff,
-            "desalination_share": reg["desal_share"],
+            "desalination_share": loc["desal_share"],
             "season": "annual",
         })
         m = sim["metrics"]
@@ -116,139 +255,97 @@ def recommend_architectures(req: StudioRequest):
         for i in range(16)
     ]
 
-    return {
-        "region": req.region,
-        "target_product": req.target_product,
-        "annual_production_tonnes": req.annual_production_tonnes,
-        "architectures": architectures,
-        "pareto_others": pareto_others,
-    }
-
-@app.post("/studio/chat")
-def studio_chat(req: ChatRequest):
-    archs = req.architectures
-    a1 = archs[0] if len(archs) > 0 else {}
-    a2 = archs[1] if len(archs) > 1 else a1
-    a3 = archs[2] if len(archs) > 2 else a1
-
-    q = req.question.lower()
-    is_en = req.lang == "en"
-
-    water_stressed_regions = {"Dakhla-Oued Eddahab", "Laâyoune", "Laâyoune-Sakia El Hamra", "Souss-Massa"}
-    is_water_stressed = req.region in water_stressed_regions
-
-    if any(k in q for k in ["eau", "water", "dessal", "hydrique", "litre", "l/"]):
-        if is_en:
-            region_note = (
-                f"{req.region} faces high water stress: desalination and water efficiency are critical."
-                if is_water_stressed
-                else f"For {req.region}, managing water demand remains a key lever for local integration."
-            )
-            reply = (
-                f"Water & Desalination Analysis — {req.region} ({req.target_product}):\n"
-                f"• {region_note}\n"
-                f"• Architecture 1 ({a1.get('badge', 'Best overall')}): {a1.get('water')} L/unit, vs. {a2.get('water')} L/unit for {a2.get('badge')} and {a3.get('water')} L/unit for {a3.get('badge')}.\n"
-                f"• Keeping the water-to-hydrogen ratio low reduces desalination power demand and secures operations."
-            )
-        else:
-            region_note = (
-                f"{req.region} présente une forte sensibilité hydrique : le dessalement et l'efficacité eau sont déterminants."
-                if is_water_stressed
-                else f"Pour {req.region}, la maîtrise de la demande en eau reste un levier clé d'intégration locale."
-            )
-            reply = (
-                f"Analyse eau & dessalement — {req.region} ({req.target_product}) :\n"
-                f"• {region_note}\n"
-                f"• Architecture 1 ({a1.get('badge', 'Best overall')}) : {a1.get('water')} L/unité, contre {a2.get('water')} L/unité pour {a2.get('badge')} et {a3.get('water')} L/unité pour {a3.get('badge')}.\n"
-                f"• Un ratio eau/hydrogène maîtrisé réduit la charge électrique du dessalement et sécurise l'exploitation."
-            )
-        sources = ["Carbonfootprint.pdf (Nexus Eau-Énergie)", "1-mainext.pdf (Couplage EnR-H2)"]
-
-    elif any(k in q for k in ["cout", "coût", "cost", "prix", "mad", "moins cher", "econom", "écono"]):
-        if is_en:
-            reply = (
-                f"Economic Analysis — {req.region} ({req.target_product}):\n"
-                f"• {a2.get('badge', 'Lowest cost')} achieves the lowest cost at {a2.get('cost')} {a2.get('unit')}, driven by a higher electrolyzer-to-RES ratio and lighter storage.\n"
-                f"• {a1.get('badge', 'Best overall')} sits at {a1.get('cost')} {a1.get('unit')}, keeping the premium modest while improving environmental balance and resilience.\n"
-                f"• {a3.get('badge', 'Lowest CO2')} reaches {a3.get('cost')} {a3.get('unit')}, reflecting the added storage needed for maximum decarbonization."
-            )
-        else:
-            reply = (
-                f"Analyse économique — {req.region} ({req.target_product}) :\n"
-                f"• {a2.get('badge', 'Lowest cost')} affiche le coût le plus bas à {a2.get('cost')} {a2.get('unit')}, grâce à un ratio électrolyseur/EnR plus élevé et un stockage plus léger.\n"
-                f"• {a1.get('badge', 'Best overall')} se situe à {a1.get('cost')} {a1.get('unit')}, soit un écart contenu tout en améliorant l'équilibre environnemental et la résilience.\n"
-                f"• {a3.get('badge', 'Lowest CO2')} atteint {a3.get('cost')} {a3.get('unit')}, reflétant le surcoût lié à la réduction maximale des émissions."
-            )
-        sources = ["1-mainext.pdf (Couplage EnR-H2)", "morocco_defaults.json (Profils régionaux)"]
-
-    elif any(k in q for k in ["co2", "carbone", "emission", "émission", "climat", "enviro"]):
-        if is_en:
-            reply = (
-                f"Carbon & Emissions Analysis — {req.region} ({req.target_product}):\n"
-                f"• {a3.get('badge', 'Lowest CO2')} delivers the lowest carbon intensity ({a3.get('co2')} kg CO2/unit) through flexible coupling and larger storage.\n"
-                f"• {a1.get('badge', 'Best overall')} achieves {a1.get('co2')} kg CO2/unit, compared to {a2.get('co2')} kg CO2/unit for {a2.get('badge')}.\n"
-                f"• The final selection depends on the trade-off between carbon intensity, unit cost, and technological maturity ({a1.get('trl')})."
-            )
-        else:
-            reply = (
-                f"Analyse carbone & émissions — {req.region} ({req.target_product}) :\n"
-                f"• {a3.get('badge', 'Lowest CO2')} vise l'intensité carbone la plus faible ({a3.get('co2')} kg CO2/unité) via un couplage plus souple et un stockage accru.\n"
-                f"• {a1.get('badge', 'Best overall')} atteint {a1.get('co2')} kg CO2/unité, face à {a2.get('co2')} kg CO2/unité pour {a2.get('badge')}.\n"
-                f"• Le choix final dépend du compromis accepté entre intensité carbone, coût de production et maturité technologique ({a1.get('trl')})."
-            )
-        sources = ["Carbonfootprint.pdf (Nexus Eau-Énergie)", "1-mainext.pdf (Couplage EnR-H2)"]
-
-    else:
-        prod_label = (
-            f" ({int(req.annual_production_tonnes):,} t/yr)" if is_en else f" ({int(req.annual_production_tonnes):,} t/an)"
-        ) if req.annual_production_tonnes is not None else ""
-
-        if is_en:
-            reply = (
-                f"Summary for {req.region} — {req.target_product}{prod_label}:\n"
-                f"• Architecture 1 ({a1.get('badge', 'Best overall')}): {a1.get('cost')} {a1.get('unit')}, {a1.get('co2')} kg CO2/unit, {a1.get('water')} L/unit ({a1.get('trl')}).\n"
-                f"• Architecture 2 ({a2.get('badge', 'Lowest cost')}): {a2.get('cost')} {a2.get('unit')} — prioritizes minimum unit production cost.\n"
-                f"• Architecture 3 ({a3.get('badge', 'Lowest CO2')}): {a3.get('co2')} kg CO2/unit — prioritizes minimum carbon emissions."
-            )
-        else:
-            reply = (
-                f"Synthèse pour {req.region} — {req.target_product}{prod_label} :\n"
-                f"• Architecture 1 ({a1.get('badge', 'Best overall')}) : {a1.get('cost')} {a1.get('unit')}, {a1.get('co2')} kg CO2/unité, {a1.get('water')} L/unité ({a1.get('trl')}).\n"
-                f"• Architecture 2 ({a2.get('badge', 'Lowest cost')}) : {a2.get('cost')} {a2.get('unit')} — priorité à la minimisation du coût unitaire.\n"
-                f"• Architecture 3 ({a3.get('badge', 'Lowest CO2')}) : {a3.get('co2')} kg CO2/unité — priorité à la réduction des émissions."
-            )
-        sources = ["1-mainext.pdf (Couplage EnR-H2)", "Carbonfootprint.pdf (Nexus Eau-Énergie)"]
-        
-        
-    # Courbe de sensibilité à la disponibilité renouvelable (-20% à +20% FLH)
     flh_multipliers = [0.80, 0.90, 1.00, 1.10, 1.20]
     sensitivity_curve = []
     for mult in flh_multipliers:
-        flh_test = round(reg["flh_res"] * mult)
+        flh_test = round(loc["flh_res"] * mult)
         point = {"flh": flh_test, "label": f"{int((mult - 1) * 100):+d}%"}
         for arch_id, rank, label, color, ratio, storage_h, ev_share, water_eff, cost_factor, water_factor in configs:
             sim_s = run_scenario_simulation({
                 "scenario_name": label,
                 "ely_res_ratio": ratio,
                 "electrolyzer_capacity_mw": cap_mw,
-                "local_lcoe_eur_per_kwh": reg["lcoe"],
+                "local_lcoe_eur_per_kwh": loc["lcoe"],
                 "flh_res_hours": flh_test,
                 "storage_duration_hours": storage_h,
                 "ev_smart_charging_share": ev_share,
                 "water_efficiency_factor": water_eff,
-                "desalination_share": reg["desal_share"],
+                "desalination_share": loc["desal_share"],
                 "season": "annual",
             })
             point[arch_id] = round(sim_s["metrics"]["lcoh_eur_per_kg"] * prod["cost_mult"] * cost_factor, 2)
         sensitivity_curve.append(point)
 
     return {
-        "region": req.region,
+        "region": loc["region"],
+        "city": loc["city"],
+        "display_location": loc["display_name"],
         "target_product": req.target_product,
         "annual_production_tonnes": req.annual_production_tonnes,
         "architectures": architectures,
         "pareto_others": pareto_others,
         "sensitivity_curve": sensitivity_curve,
-    }    
+    }
+
+
+@app.post("/studio/chat")
+def studio_chat(req: ChatRequest):
+    loc = _resolve_location(req.city if req.city else req.region)
+    engine_region = loc["engine_key"]
+    comparaison = None
+    sources = ["src/engine.py (Optimisation EnR-H2)", "src/ai_assistant.py (SHERPA LLM)"]
+
+    if engine_region:
+        resultats = optimiser_architecture(engine_region, n_mc=0)
+        try:
+            comp = comparer_scenarios(engine_region)
+            if comp and "erreur" not in comp:
+                comparaison = comp
+                sources.append("src/comparaison.py (Analyse multicritère)")
+        except Exception:
+            comparaison = None
+    else:
+        resultats = _build_fallback_resultats(
+            req.architectures,
+            req.annual_production_tonnes or 100000.0,
+        )
+        sources = [f"app/engine/simulator.py ({loc['display_name']})", "src/ai_assistant.py (SHERPA LLM)"]
+
+    # Détecte si l'utilisateur demande dans le chat une autre ville/région que celle sélectionnée
+    q_norm = _norm(req.question)
+    mentioned_city = next(
+        (c for c in CITY_PROFILES if _norm(c) in q_norm and _norm(c) != _norm(loc["display_name"])),
+        None,
+    )
+
+    lang_directive = (
+        "Answer in English (max 200 words), keeping decimal dots."
+        if req.lang == "en"
+        else "Réponds en français (max 200 mots)."
+    )
+    prod_info = f"Localisation active : {loc['display_name']} (Région {loc['region']}). Produit cible : {req.target_product}"
+    if req.annual_production_tonnes:
+        prod_info += f" ({int(req.annual_production_tonnes):,} t/an)"
+
+    extra_note = ""
+    if mentioned_city:
+        target_reg = CITY_PROFILES[mentioned_city]["region"]
+        extra_note = (
+            f" Note : l'utilisateur demande un scénario à {mentioned_city} (région {target_reg}), "
+            f"alors que la simulation affichée concerne {loc['display_name']}. "
+            f"Indique-lui qu'il peut sélectionner directement la ville « {mentioned_city} » "
+            f"(ou la région « {target_reg} ») dans le panneau Projet à gauche pour lancer le calcul."
+        )
+
+    enriched_question = f"{req.question}\n[{prod_info}.{extra_note} {lang_directive}]"
+    historique = [m.model_dump() for m in req.history] if req.history else None
+
+    reply = generer_explication(
+        region=engine_region or loc["display_name"],
+        resultats=resultats,
+        question=enriched_question,
+        historique=historique,
+        comparaison=comparaison,
+    )
 
     return {"reply": reply, "sources": sources}
