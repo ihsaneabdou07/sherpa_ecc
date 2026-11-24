@@ -224,3 +224,5 @@ __marimo__/
 .env
 .pytest_cache/
 exports/
+node_modules/
+dist/
