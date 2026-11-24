@@ -1,0 +1,63 @@
+{
+  "meta": {
+    "country": "Morocco",
+    "currency": "EUR",
+    "reference_year": 2026
+  },
+  "green_hydrogen": {
+    "local_lcoe_eur_per_kwh": 0.032,
+    "flh_res_hours": 3200,
+    "flh_h2_hours": 4200,
+    "ely_res_ratio": {
+      "default": 0.75,
+      "min": 0.3,
+      "max": 1.2
+    },
+    "electrolyzer": {
+      "min_load_threshold_pct": 10.0,
+      "nominal_efficiency_lhv": 0.67,
+      "part_load_efficiency_gain": 0.03,
+      "capex_eur_per_kw_ref": 850.0,
+      "ref_capacity_mw": 100.0,
+      "scale_exponent": 0.85,
+      "opex_pct_capex": 0.03,
+      "lifetime_years": 20,
+      "wacc": 0.07,
+      "water_consumption_l_per_kg_h2": 15.0
+    }
+  },
+  "batteries_and_ev": {
+    "storage_duration_hours": {
+      "default": 4.0,
+      "min": 1.0,
+      "max": 8.0
+    },
+    "capex_eur_per_kwh": 190.0,
+    "round_trip_efficiency": 0.88,
+    "lifetime_years": 15,
+    "cycles_per_year": 320,
+    "wacc": 0.07,
+    "pv_storage_valcoe_bonus_eur_per_mwh": 18.0,
+    "ev_fleet": {
+      "smart_charging_share_default": 0.4,
+      "v2g_participation_default": 0.15,
+      "peak_shaving_potential_mw_per_10k_evs": 12.0,
+      "flexibility_cost_reduction_factor": 0.12
+    }
+  },
+  "water_energy_carbon_nexus": {
+    "grid_emission_factor_kg_co2e_per_kwh": 0.54,
+    "renewable_emission_factor_kg_co2e_per_kwh": 0.025,
+    "seasonal_grid_variation_factor": {
+      "winter": 1.08,
+      "summer": 0.92
+    },
+    "water_supply": {
+      "desalination_energy_kwh_per_m3": 3.4,
+      "wastewater_treatment_energy_kwh_per_m3": 0.65,
+      "pumping_energy_kwh_per_m3": 0.45,
+      "water_cost_eur_per_m3": 0.85,
+      "water_efficiency_factor_default": 1.0
+    }
+  }
+}

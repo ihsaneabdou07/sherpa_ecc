@@ -1,34 +1,46 @@
 import { useState } from "react";
 import type { ArchitectureItem } from "../types/studio";
+import { translations, type Lang } from "../i18n/translations";
 
 interface ParetoPoint {
   cost: number;
   co2: number;
 }
 
+export interface SensitivityPoint {
+  flh: number;
+  label: string;
+  [archId: string]: number | string;
+}
+
 interface ChartsPanelProps {
   architectures: ArchitectureItem[];
   paretoOthers?: ParetoPoint[];
+  sensitivityCurve?: SensitivityPoint[];
   selectedArchId?: string | null;
   onSelectArch?: (id: string) => void;
+  lang?: Lang;
 }
 
-const AXES = [
-  { key: "cost_score" as const, label: "Cost" },
-  { key: "co2_score" as const, label: "CO2" },
-  { key: "water_score" as const, label: "Water" },
-  { key: "trl_score" as const, label: "Maturity" },
-  { key: "efficiency_score" as const, label: "Efficiency" },
-];
+const AXES_KEYS = [
+  "cost_score",
+  "co2_score",
+  "water_score",
+  "trl_score",
+  "efficiency_score",
+] as const;
 
 export function ChartsPanel({
   architectures,
   paretoOthers = [],
+  sensitivityCurve = [],
   selectedArchId,
   onSelectArch,
+  lang = "fr",
 }: ChartsPanelProps) {
   const [hoveredArchId, setHoveredArchId] = useState<string | null>(null);
   const [hoveredPareto, setHoveredPareto] = useState<ParetoPoint | null>(null);
+  const t = translations[lang];
 
   if (!architectures || architectures.length === 0) {
     return null;
@@ -73,7 +85,7 @@ export function ChartsPanel({
   const cx = rSize / 2;
   const cy = rSize / 2 + 4;
   const maxRadius = 74;
-  const numAxes = AXES.length;
+  const numAxes = AXES_KEYS.length;
 
   const polarToCartesian = (angleIndex: number, valuePct: number) => {
     const clamped = Math.max(0, Math.min(100, valuePct));
@@ -85,12 +97,41 @@ export function ChartsPanel({
     };
   };
 
+  // --- 3. Configuration Sensibilité (SVG) ---
+  const sWidth = 640;
+  const sHeight = 175;
+  const sPadL = 46;
+  const sPadR = 24;
+  const sPadT = 18;
+  const sPadB = 34;
+
+  const sensValues = sensitivityCurve.flatMap((pt) =>
+    architectures.map((a) => Number(pt[a.id] ?? a.cost))
+  );
+  const sMinY = sensValues.length ? Math.max(0, Math.min(...sensValues) * 0.92) : 0;
+  const sMaxY = sensValues.length ? Math.max(...sensValues) * 1.06 : 1;
+
+  const toSensX = (idx: number) =>
+    sensitivityCurve.length <= 1
+      ? (sPadL + sWidth - sPadR) / 2
+      : sPadL + (idx / (sensitivityCurve.length - 1)) * (sWidth - sPadL - sPadR);
+  const toSensY = (val: number) =>
+    sHeight - sPadB - ((val - sMinY) / (sMaxY - sMinY || 1)) * (sHeight - sPadT - sPadB);
+
   return (
     <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid #e2e8f0" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "center" }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+          gap: 14,
+          alignItems: "stretch",
+        }}
+      >
         {/* Graphique Pareto */}
         <div
           style={{
+            minWidth: 0,
             background: "#f8fafc",
             borderRadius: 10,
             padding: 10,
@@ -98,37 +139,15 @@ export function ChartsPanel({
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-            📉 Pareto frontier (Cost vs CO2)
+            📉 {t.paretoTitle}
           </div>
 
           <svg viewBox={`0 0 ${pWidth} ${pHeight}`} style={{ width: "100%", height: "auto", display: "block" }}>
-            {/* Axes */}
-            <line
-              x1={padLeft}
-              y1={padTop}
-              x2={padLeft}
-              y2={pHeight - padBottom}
-              stroke="#cbd5e1"
-              strokeWidth={1}
-            />
-            <line
-              x1={padLeft}
-              y1={pHeight - padBottom}
-              x2={pWidth - padRight}
-              y2={pHeight - padBottom}
-              stroke="#cbd5e1"
-              strokeWidth={1}
-            />
+            <line x1={padLeft} y1={padTop} x2={padLeft} y2={pHeight - padBottom} stroke="#cbd5e1" strokeWidth={1} />
+            <line x1={padLeft} y1={pHeight - padBottom} x2={pWidth - padRight} y2={pHeight - padBottom} stroke="#cbd5e1" strokeWidth={1} />
 
-            {/* Labels axes */}
-            <text
-              x={(padLeft + pWidth - padRight) / 2}
-              y={pHeight - 6}
-              textAnchor="middle"
-              fontSize="10"
-              fill="#64748b"
-            >
-              Cost ({unit})
+            <text x={(padLeft + pWidth - padRight) / 2} y={pHeight - 6} textAnchor="middle" fontSize="10" fill="#64748b">
+              {t.costAxis} ({unit})
             </text>
             <text
               x={12}
@@ -138,13 +157,11 @@ export function ChartsPanel({
               fill="#64748b"
               transform={`rotate(-90 12 ${(padTop + pHeight - padBottom) / 2})`}
             >
-              CO2 (kg/u)
+              {t.co2Axis}
             </text>
 
-            {/* Points secondaires Pareto */}
             {paretoOthers.map((pt, idx) => {
-              const isHovered =
-                hoveredPareto?.cost === pt.cost && hoveredPareto?.co2 === pt.co2;
+              const isHovered = hoveredPareto?.cost === pt.cost && hoveredPareto?.co2 === pt.co2;
               return (
                 <circle
                   key={`other-${idx}`}
@@ -163,7 +180,6 @@ export function ChartsPanel({
               );
             })}
 
-            {/* Points des 3 architectures */}
             {architectures.map((arch) => {
               const isHighlighted = hoveredArchId === arch.id || selectedArchId === arch.id;
               return (
@@ -204,6 +220,7 @@ export function ChartsPanel({
         {/* Graphique Radar + Légende */}
         <div
           style={{
+            minWidth: 0,
             background: "#f8fafc",
             borderRadius: 10,
             padding: 10,
@@ -211,49 +228,31 @@ export function ChartsPanel({
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 4 }}>
-            🕸️ Multi-criteria profile
+            🕸️ {t.radarTitle}
           </div>
 
           <svg viewBox={`0 0 ${rSize} ${rSize}`} style={{ width: "100%", height: "auto", display: "block" }}>
-            {/* Cercles concentriques */}
             {[25, 50, 75, 100].map((level) => (
-              <circle
-                key={level}
-                cx={cx}
-                cy={cy}
-                r={(level / 100) * maxRadius}
-                fill="none"
-                stroke="#e2e8f0"
-                strokeWidth={1}
-              />
+              <circle key={level} cx={cx} cy={cy} r={(level / 100) * maxRadius} fill="none" stroke="#e2e8f0" strokeWidth={1} />
             ))}
 
-            {/* Axes et étiquettes */}
-            {AXES.map((axis, i) => {
+            {AXES_KEYS.map((key, i) => {
               const tip = polarToCartesian(i, 100);
               const labelPos = polarToCartesian(i, 120);
               return (
-                <g key={axis.key}>
+                <g key={key}>
                   <line x1={cx} y1={cy} x2={tip.x} y2={tip.y} stroke="#cbd5e1" strokeWidth={1} />
-                  <text
-                    x={labelPos.x}
-                    y={labelPos.y + 3}
-                    textAnchor="middle"
-                    fontSize="9.5"
-                    fill="#475569"
-                    fontWeight="600"
-                  >
-                    {axis.label}
+                  <text x={labelPos.x} y={labelPos.y + 3} textAnchor="middle" fontSize="9.5" fill="#475569" fontWeight="600">
+                    {t.axes[key]}
                   </text>
                 </g>
               );
             })}
 
-            {/* Polygones des architectures */}
             {architectures.map((arch) => {
               const isHighlighted = hoveredArchId === arch.id || selectedArchId === arch.id;
-              const points = AXES.map((axis, i) => {
-                const pt = polarToCartesian(i, arch.radar[axis.key]);
+              const points = AXES_KEYS.map((key, i) => {
+                const pt = polarToCartesian(i, arch.radar[key]);
                 return `${pt.x},${pt.y}`;
               }).join(" ");
 
@@ -274,7 +273,6 @@ export function ChartsPanel({
             })}
           </svg>
 
-          {/* Légende interactive sous le radar */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6, justifyContent: "center" }}>
             {architectures.map((arch) => {
               const active = hoveredArchId === arch.id || selectedArchId === arch.id;
@@ -299,15 +297,7 @@ export function ChartsPanel({
                     color: "#0f172a",
                   }}
                 >
-                  <span
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: "50%",
-                      background: arch.color,
-                      display: "inline-block",
-                    }}
-                  />
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: arch.color, display: "inline-block" }} />
                   <span>
                     #{arch.rank} {arch.badge}
                   </span>
@@ -318,7 +308,105 @@ export function ChartsPanel({
         </div>
       </div>
 
-      {/* Barre d'inspection dynamique au survol / sélection */}
+      {/* Graphique 3 : Sensibilité FLH */}
+      {sensitivityCurve.length > 0 && (
+        <div
+          style={{
+            marginTop: 12,
+            background: "#f8fafc",
+            borderRadius: 10,
+            padding: 10,
+            border: "1px solid #e2e8f0",
+          }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+            📈 {t.sensitivityTitle}
+          </div>
+
+          <svg viewBox={`0 0 ${sWidth} ${sHeight}`} style={{ width: "100%", height: "auto", display: "block" }}>
+            <line x1={sPadL} y1={sPadT} x2={sPadL} y2={sHeight - sPadB} stroke="#cbd5e1" strokeWidth={1} />
+            <line x1={sPadL} y1={sHeight - sPadB} x2={sWidth - sPadR} y2={sHeight - sPadB} stroke="#cbd5e1" strokeWidth={1} />
+
+            {/* Repères verticaux FLH */}
+            {sensitivityCurve.map((pt, idx) => {
+              const x = toSensX(idx);
+              const isBaseline = pt.label === "+0%";
+              return (
+                <g key={pt.flh}>
+                  <line
+                    x1={x}
+                    y1={sPadT}
+                    x2={x}
+                    y2={sHeight - sPadB}
+                    stroke={isBaseline ? "#94a3b8" : "#e2e8f0"}
+                    strokeDasharray={isBaseline ? "3 3" : undefined}
+                    strokeWidth={1}
+                  />
+                  <text x={x} y={sHeight - 16} textAnchor="middle" fontSize="10" fill="#475569" fontWeight={isBaseline ? "700" : "500"}>
+                    {pt.flh}h ({pt.label})
+                  </text>
+                </g>
+              );
+            })}
+
+            <text x={(sPadL + sWidth - sPadR) / 2} y={sHeight - 3} textAnchor="middle" fontSize="9.5" fill="#64748b">
+              {t.flhAxis}
+            </text>
+            <text
+              x={14}
+              y={(sPadT + sHeight - sPadB) / 2}
+              textAnchor="middle"
+              fontSize="10"
+              fill="#64748b"
+              transform={`rotate(-90 14 ${(sPadT + sHeight - sPadB) / 2})`}
+            >
+              {t.costAxis} ({unit})
+            </text>
+
+            {/* Courbes par architecture */}
+            {architectures.map((arch) => {
+              const isHighlighted = hoveredArchId === arch.id || selectedArchId === arch.id;
+              const polyPoints = sensitivityCurve
+                .map((pt, idx) => `${toSensX(idx)},${toSensY(Number(pt[arch.id] ?? arch.cost))}`)
+                .join(" ");
+
+              return (
+                <g
+                  key={`sens-${arch.id}`}
+                  style={{ cursor: "pointer" }}
+                  onMouseEnter={() => setHoveredArchId(arch.id)}
+                  onMouseLeave={() => setHoveredArchId(null)}
+                  onClick={() => onSelectArch?.(arch.id)}
+                >
+                  <polyline
+                    fill="none"
+                    stroke={arch.color}
+                    strokeWidth={isHighlighted ? 3 : 1.8}
+                    opacity={isHighlighted ? 1 : 0.7}
+                    points={polyPoints}
+                  />
+                  {sensitivityCurve.map((pt, idx) => {
+                    const val = Number(pt[arch.id] ?? arch.cost);
+                    return (
+                      <circle
+                        key={`${arch.id}-${pt.flh}`}
+                        cx={toSensX(idx)}
+                        cy={toSensY(val)}
+                        r={isHighlighted ? 4.5 : 3}
+                        fill={arch.color}
+                        stroke="#fff"
+                        strokeWidth={1.2}
+                      />
+                    );
+                  })}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      )}
+
+      {/* Barre d'inspection dynamique */}
       <div
         style={{
           marginTop: 10,
@@ -341,24 +429,23 @@ export function ChartsPanel({
               <strong style={{ color: activeArch.color }}>
                 #{activeArch.rank} {activeArch.badge}
               </strong>{" "}
-              — Coût : <strong>{activeArch.cost} {activeArch.unit}</strong> | CO2 :{" "}
-              <strong>{activeArch.co2} kg CO2/u</strong> | Eau :{" "}
+              — {t.inspectCost} : <strong>{activeArch.cost} {activeArch.unit}</strong> | CO2 :{" "}
+              <strong>{activeArch.co2} kg CO2/u</strong> | {t.inspectWater} :{" "}
               <strong>{activeArch.water} L/u</strong>
             </div>
             <div style={{ fontSize: 11, color: "#64748b" }}>
-              Scores : Cost {activeArch.radar.cost_score} · CO2 {activeArch.radar.co2_score} · Water{" "}
-              {activeArch.radar.water_score} · Eff. {activeArch.radar.efficiency_score}
+              {t.inspectScores} : {t.axes.cost_score} {activeArch.radar.cost_score} · {t.axes.co2_score}{" "}
+              {activeArch.radar.co2_score} · {t.axes.water_score} {activeArch.radar.water_score} ·{" "}
+              {t.inspectEff} {activeArch.radar.efficiency_score}
             </div>
           </>
         ) : hoveredPareto ? (
           <div>
-            Point alternatif — Coût : <strong>{hoveredPareto.cost} {unit}</strong> | CO2 :{" "}
+            {t.inspectAltPoint} — {t.inspectCost} : <strong>{hoveredPareto.cost} {unit}</strong> | CO2 :{" "}
             <strong>{hoveredPareto.co2} kg CO2/u</strong>
           </div>
         ) : (
-          <span style={{ color: "#64748b" }}>
-            Survole ou clique sur un point, une courbe radar ou la légende pour inspecter les valeurs exactes.
-          </span>
+          <span style={{ color: "#64748b" }}>{t.inspectHint}</span>
         )}
       </div>
     </div>
