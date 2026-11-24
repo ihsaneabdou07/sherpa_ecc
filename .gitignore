@@ -221,3 +221,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+.env
+.pytest_cache/
+exports/
+node_modules/
+dist/
