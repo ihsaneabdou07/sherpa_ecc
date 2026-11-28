@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sherpa ECC · Décision e-fuels Maroc</title>
+<meta name="description" content="Outil d'aide à la décision pour la production d'e-fuels au Maroc : coûts, CAPEX, sensibilité, décision multicritère.">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo" aria-hidden="true">▲</span><div><h1>Sherpa ECC</h1><p>Aide à la décision · e-fuels · Maroc</p></div></div>
+  <div class="top-actions">
+    <span id="apiStatus" class="pill" title="Mode de l'assistant">Mode autonome</span>
+    <button id="themeBtn" class="btn ghost" type="button" aria-label="Changer de thème">◐ Thème</button>
+    <button id="printBtn" class="btn ghost" type="button">Imprimer</button>
+  </div>
+</header>
+<nav class="tabs" role="tablist" aria-label="Sections" id="tabs"></nav>
+<main id="main">
+  <section id="tab-dashboard" class="panel" role="tabpanel"></section>
+  <section id="tab-sim" class="panel" role="tabpanel" hidden></section>
+  <section id="tab-sens" class="panel" role="tabpanel" hidden></section>
+  <section id="tab-capex" class="panel" role="tabpanel" hidden></section>
+  <section id="tab-decision" class="panel" role="tabpanel" hidden></section>
+  <section id="tab-hybride" class="panel" role="tabpanel" hidden></section>
+  <section id="tab-kb" class="panel" role="tabpanel" hidden></section>
+  <section id="tab-ptx" class="panel" role="tabpanel" hidden></section>
+  <section id="tab-assistant" class="panel" role="tabpanel" hidden></section>
+</main>
+<footer class="foot">Pré-faisabilité : résultats indicatifs, hypothèses [HYP] à valider (voir l'onglet « Base de connaissances » → Hypothèses et Alertes). Source principale : Colelli et al. (2026), Energy Conversion and Management.</footer>
+<script src="js/data.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
